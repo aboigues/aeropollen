@@ -1,0 +1,18 @@
+# Clé de signature locale (générée par développeur, ne doit jamais être partagée/committée)
+developer_key.der
+developer_key.pem
+
+# Artefacts de build Connect IQ
+build/
+*.prg
+*.iq
+*.barrel
+bin/*.debug.xml.zip
+
+# Divers
+.DS_Store
+*.log
+
+# Configuration/état locaux de Claude Code (spécifiques à la machine)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
