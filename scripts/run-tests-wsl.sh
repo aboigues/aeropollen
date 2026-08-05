@@ -113,7 +113,18 @@ for app in "${apps[@]}"; do
 
         # Tue tout simulateur/Xvfb précédent (port 1234 fixe, cf. avertissement ci-dessus) avant
         # d'en relancer un nouveau, et attend que le port soit effectivement libéré.
-        docker exec "$CONTAINER_NAME" bash -c "pkill -9 -f bin/simulator; pkill -9 -f Xvfb; exit 0" >/dev/null 2>&1
+        #
+        # Deux pièges cumulés ici (cf. TROUBLESHOOTING.md §10) :
+        # 1. `pkill -f bin/simulator` ne correspond JAMAIS au process réel : invoqué via
+        #    résolution de PATH, son argv[0]/cmdline est simplement "simulator", sans aucun
+        #    chemin — confirmé via /proc/<pid>/cmdline. `pkill -f` ne l'a donc jamais tué, quel
+        #    que soit le nombre de fois où cette ligne s'exécutait. `-x` (correspondance exacte
+        #    sur le nom du process, pas sur la ligne de commande) fonctionne.
+        # 2. Même une fois correctement tué, le simulateur laisse un fichier verrou mono-instance
+        #    (/root/Sim-root) qui n'est nettoyé que lors d'un arrêt propre — jamais après un
+        #    signal. Sans le supprimer explicitement, toute nouvelle instance de `simulator`
+        #    refuse de démarrer, silencieusement (aucune ligne de log, aucune erreur).
+        docker exec "$CONTAINER_NAME" bash -c "pkill -9 -x simulator; pkill -9 -x Xvfb; rm -f /root/Sim-root; exit 0" >/dev/null 2>&1
         docker exec "$CONTAINER_NAME" bash -c '
             for i in $(seq 1 20); do
                 (exec 3<>/dev/tcp/127.0.0.1/1234) 2>/dev/null || exit 0
@@ -157,6 +168,8 @@ for app in "${apps[@]}"; do
             docker exec "$CONTAINER_NAME" bash -c "
                 echo '--- ps aux (simulator/Xvfb) ---'
                 ps aux | grep -E 'simulator|Xvfb' | grep -v grep
+                echo '--- /root/Sim-root (verrou mono-instance) ---'
+                ls -la /root/Sim-root 2>&1
                 echo '--- xvfb-$display_counter.log ---'
                 cat /tmp/xvfb-$display_counter.log
                 echo '--- simulator-$display_counter.log ---'
@@ -182,7 +195,16 @@ for app in "${apps[@]}"; do
             break
         fi
 
-        # Sortie vide ou inattendue : le simulateur a probablement crashé pendant ce cycle.
+        # Sortie vide ou inattendue de monkeydo lui-même (distinct du cas "simulateur non
+        # joignable" ci-dessus, déjà diagnostiqué) : le simulateur était joignable au moment du
+        # check, mais quelque chose s'est mal passé pendant l'exécution des tests.
+        echo "monkeydo n'a produit aucun résultat PASSED/FAILED exploitable"
+        echo "--- contenu de $log_file ($(wc -l < "$log_file") lignes) ---"
+        cat "$log_file"
+        docker exec "$CONTAINER_NAME" bash -c '
+            echo "--- ps aux (simulator/Xvfb) au moment de cet echec ---"
+            ps aux | grep -E "simulator|Xvfb" | grep -v grep
+        ' || true
         attempt=$((attempt + 1))
     done
 

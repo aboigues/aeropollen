@@ -223,30 +223,53 @@ dans un même run (la première réussit toujours) — `Simulateur non joignable
    distincts à chaque tentative (`:101`, `:102`, `:103`), donc ce n'était pas (ou pas seulement)
    un problème de collision de socket X11.
 
-**Cause réelle, confirmée par relecture du diff** : en corrigeant l'hypothèse 3, la ligne qui
-tuait explicitement les process `simulator`/`Xvfb` précédents (`pkill -f bin/simulator; pkill -f
-'Xvfb :99'`) a été supprimée par erreur, sans être remplacée. Or **`simulator` écoute toujours
-sur le même port TCP fixe, 1234, quel que soit le `DISPLAY` sur lequel il rend l'écran** — changer
-de numéro de display (hypothèse 3) n'a donc aucun effet sur ce problème précis. Sans ce `pkill`,
-le simulateur de la 1re application reste vivant et garde le port 1234 ; celui de la 2e
-application démarre normalement (log `Debug: SetLayout` identique à un démarrage réussi) mais ne
-peut jamais se lier au port déjà pris — sans lever la moindre erreur explicite, d'où la difficulté
-à diagnostiquer ce cas précis.
+4. *`pkill` supprimé par erreur en corrigeant l'hypothèse 3* — en donnant un display unique par
+   tentative, la ligne qui tuait explicitement les process `simulator`/`Xvfb` précédents a été
+   supprimée sans être remplacée. Restaurée (`pkill -9`) au début de chaque tentative. **Bug réel
+   et corrigé**, mais toujours pas la cause complète : le run CI suivant échouait encore.
+5. *`pkill -f bin/simulator` ne correspond jamais au process réel* — confirmé via
+   `/proc/<pid>/cmdline` : invoqué par résolution de `PATH`, l'argv du process est simplement
+   `simulator`, sans aucun chemin. `pkill -f bin/simulator` ne l'a donc **jamais** tué, ici ni en
+   CI, peu importe le nombre de fois où cette ligne s'exécutait. Corrigé avec `pkill -9 -x
+   simulator` (correspondance exacte sur le nom du process). **Bug réel et corrigé.**
+6. *Verrou mono-instance orphelin* — même correctement tué (hypothèse 5 corrigée), le simulateur
+   laisse un fichier verrou mono-instance, `/root/Sim-root`, qui n'est nettoyé qu'à l'arrêt
+   propre — jamais après un signal (`SIGKILL` ou `SIGTERM`). Sans le supprimer explicitement,
+   toute nouvelle instance de `simulator` refuse de démarrer, silencieusement (aucune ligne de
+   log, aucune erreur) — exactement le symptôme documenté au §3 pour `sdkmanager`, jamais
+   rapproché du même problème pour `simulator` avant cette investigation. Corrigé par
+   `rm -f /root/Sim-root` avant chaque relance. **Bug réel et corrigé**, confirmé par
+   reproduction manuelle isolée (`docker exec` pas à pas, en dehors du script).
 
-**Correction finale** : le `pkill` explicite (`simulator` et `Xvfb`, `-9` pour un arrêt immédiat)
-est restauré au début de **chaque tentative**, suivi d'une attente active que le port 1234 soit
-effectivement libéré avant de relancer quoi que ce soit — en plus (pas à la place) du numéro de
-display jamais réutilisé de l'hypothèse 3, qui reste une bonne pratique. Diagnostic supplémentaire
-ajouté en cas d'échec : `ps aux | grep -E 'simulator|Xvfb'` et le contenu de `xvfb-N.log` /
-`simulator-N.log`, pour ne plus jamais avoir à re-deviner à l'aveugle.
+**Après les hypothèses 4 à 6, un dernier symptôme, plus profond, reste observé** (diagnostic
+ajouté pour l'objectiver plutôt que continuer à deviner) : sur un run isolé et propre, la toute
+première tentative voit le simulateur démarrer et devenir brièvement joignable (le check TCP
+passe), puis **mourir avant que `monkeydo` ne puisse s'en servir** (`ps aux` juste après ne
+montre plus aucun process `simulator`, sortie de `monkeydo` totalement vide). Sur les tentatives
+suivantes, symptôme différent : le process reste vivant avec un log de démarrage identique à un
+succès, mais son port ne s'ouvre jamais. Deux manifestations distinctes d'une même instabilité de
+fond — cohérent avec le segfault (`signal 11`) confirmé très tôt dans cette investigation via
+`dmesg`, qui n'avait pas disparu : il était seulement masqué par les bugs 4-6 ci-dessus (le
+simulateur ne redémarrait jamais correctement de toute façon, donc son instabilité intrinsèque
+n'était même pas ce qui bloquait le plus souvent).
 
-**Statut** : confirmé résolu en local (43/43 tests, les deux applications en un seul essai, sans
-retry) après cette correction. Un avertissement bénin subsiste parfois (« Port 1234 toujours
-occupé après arrêt du simulateur précédent ») sans bloquer la suite — la vérification de
-libération du port peut prendre plus que les ~10 s prévus dans de rares cas ; le script continue
-quand même et ça fonctionne, non creusé davantage.
+**Décision actée avec l'utilisateur (2026-08-05)** : ne pas continuer à investiguer un crash
+non-déterministe dans un binaire propriétaire sans code source disponible. Le job `tests.yml` est
+passé en `continue-on-error: true` — il reste exécuté et son résultat visible à chaque PR, mais
+ne bloque plus la fusion. La garantie de non-régression réelle du projet reste
+`scripts/run-tests-wsl.sh` exécuté **en local** (fiable, y compris pour les régressions
+applicatives : 43/43 tests systématiquement verts dès que le simulateur démarre correctement) et
+la validation manuelle sur appareil physique (§8) — toutes deux déjà pratiquées pour ce projet
+indépendamment de la CI.
 
-**Leçon retenue** : lors d'une correction, ne pas supprimer un mécanisme existant (ici, le
-`pkill`) sans avoir vérifié explicitement qu'il n'est plus nécessaire — la nouvelle hypothèse
-(display réutilisé) semblait suffire à expliquer le symptôme, mais n'était en réalité qu'une
-amélioration annexe sans lien avec la cause réelle.
+**Statut final** : 3 bugs réels identifiés et corrigés (display réutilisé, pattern `pkill`
+incorrect, verrou orphelin) — tous restent dans le script, ce sont de vraies améliorations. Le
+job CI reste informatif mais non bloquant tant que l'instabilité intrinsèque du binaire
+`simulator` sous Docker+Xvfb n'est pas mieux comprise.
+
+**Leçon retenue** : lors d'une correction, ne pas supprimer un mécanisme existant (ici, un
+`pkill`) sans avoir vérifié explicitement qu'il n'est plus nécessaire. Et surtout : ajouter le
+diagnostic (contenu des logs, `ps aux`, état des fichiers verrou) **avant** de formuler une
+nouvelle hypothèse, pas après plusieurs correctifs infructueux — chaque round de « ça ne marche
+toujours pas » sans données nouvelles n'était qu'une supposition de plus, jusqu'à ce que le
+`ps aux` et `/proc/<pid>/cmdline` réels tranchent la question sans ambiguïté.

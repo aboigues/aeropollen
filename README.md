@@ -127,6 +127,13 @@ Voir
 [`TROUBLESHOOTING.md` §9](TROUBLESHOOTING.md#9-résolution-du-5--xvfb-au-lieu-du-display-réel-wslg--exécution-réelle-des-tests-obtenue)
 pour le détail de la découverte et le fonctionnement exact.
 
+**CI** : `.github/workflows/tests.yml` exécute ce même script à chaque PR, mais en mode
+informatif (`continue-on-error`) — le binaire `simulator` (propriétaire Garmin) crashe parfois de
+façon non déterministe sous Docker+Xvfb, y compris sur un runner fraîchement provisionné (voir
+[`TROUBLESHOOTING.md` §10](TROUBLESHOOTING.md#10-scriptsrun-tests-wslsh--le-simulateur-ne-répond-plus-pour-la-2e-application-testée)).
+La garantie de non-régression réelle reste l'exécution en local (fiable) et la validation sur
+appareil physique.
+
 ## Documentation
 
 - [`specs/001-pollen-air-datafield/`](specs/001-pollen-air-datafield/) — spécification complète
