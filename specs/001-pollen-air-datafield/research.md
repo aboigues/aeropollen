@@ -152,14 +152,14 @@ puisque l'API cible ne requiert pas d'authentification en usage non commercial.
 ## 9. Architecture multi-applications et Barrel partagé (découvert à l'implémentation)
 
 **Decision**: FR-006 (confirmé par l'utilisateur : « champs distincts sélectionnables ») exige
-en réalité **deux applications Connect IQ séparées** — `air-quality-field` (type `datafield`) et
-`pollen-field` (type `datafield`) —, chacune avec son propre `manifest.xml` et son propre
+en réalité **deux applications Connect IQ séparées** — `aeropollen-air-quality-field` (type `datafield`) et
+`aeropollen-pollen-field` (type `datafield`) —, chacune avec son propre `manifest.xml` et son propre
 `<iq:application>`. La documentation officielle du SDK (`Manifest_and_Permissions.html`,
 vérifiée le 2026-08-04 dans le SDK 9.2.0 installé localement) confirme qu'**un manifeste
 Connect IQ ne peut déclarer qu'un seul `<iq:application>`** : le sélecteur de champs de Garmin
 liste des applications installées, pas des vues internes à une même application. Le code commun
 (entités, cache, client Open-Meteo, Background Service) est factorisé dans un **Monkey Barrel**
-partagé nommé `EnvironmentalCore`, référencé par les deux applications via `barrelPath` dans
+partagé nommé `AeroPollenCore`, référencé par les deux applications via `barrelPath` dans
 leurs `monkey.jungle` respectifs et déclaré dans leurs `manifest.xml` via `<iq:barrels>`
 (mécanisme officiel « Shareable Libraries », vérifié dans `Shareable_Libraries.html` et
 `Jungle_Reference.html` du même SDK).
@@ -169,8 +169,8 @@ data is only available to the application », `Persisting_Data.html`). Les deux 
 peuvent donc pas partager une seule instance de cache ni un seul appel réseau : **chacune exécute
 son propre Background Service et son propre appel HTTPS vers Open-Meteo**, en utilisant le même
 code de client (`OpenMeteoAirQualityClient` du Barrel), mais chacune n'exploite que le
-sous-ensemble de la réponse qui la concerne (l'European AQI pour `air-quality-field`, les six
-variables de pollen pour `pollen-field`). Ceci double le nombre d'appels réseau par rapport à
+sous-ensemble de la réponse qui la concerne (l'European AQI pour `aeropollen-air-quality-field`, les six
+variables de pollen pour `aeropollen-pollen-field`). Ceci double le nombre d'appels réseau par rapport à
 l'hypothèse initiale d'un cache unique partagé (research.md §3, version précédente), mais reste
 conforme à FR-003/SC-002 (chaque application actualise indépendamment au moins toutes les 15
 minutes) et à FR-007 (aucun appel réseau dans `compute()`/`onUpdate()`, toujours via Background
@@ -226,14 +226,14 @@ quickstart.md pour la procédure de validation manuelle sur Windows/appareil phy
 **Piège rencontré — référence croisée Barrel/(:background)** : lorsqu'une application référence,
 depuis sa classe `Application.AppBase`, à la fois une vue d'écran normale (ex.
 `AirQualityFieldView`) et une classe annotée `(:background)` **provenant d'un Barrel**
-(`EnvironmentalCore.EnvironmentalBackgroundDelegate`), le compilateur 9.2.0 rejette la référence
+(`AeroPollenCore.EnvironmentalBackgroundDelegate`), le compilateur 9.2.0 rejette la référence
 à la vue avec l'erreur « Value 'X' not available in all function scopes », même si la classe
 `AppBase` est elle-même annotée `(:background)` (pattern pourtant utilisé avec succès par
 l'exemple officiel `samples/BackgroundTimer`, qui ne traverse pas de Barrel). Contournement
 vérifié : annoter la méthode `getInitialView()` avec `(:typecheck(disableBackgroundCheck))`
 (annotation vue dans `samples/BackgroundTimer/source/BackgroundTimerApp.mc` pour un cas
 apparenté). Ce contournement est appliqué de façon identique dans les deux applications
-(`air-quality-field`, `pollen-field`).
+(`aeropollen-air-quality-field`, `aeropollen-pollen-field`).
 
 ## 12. Déclenchement de l'actualisation (User Story 3) : limite de la plateforme
 

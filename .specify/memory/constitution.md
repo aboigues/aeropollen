@@ -18,7 +18,7 @@ Sync Impact Report
 - TODOs différés : aucun
 -->
 
-# Pollen Data Field Constitution
+# AeroPollen Constitution
 
 ## Core Principles
 
