@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (historique complet requis par gitleaks)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # L'action officielle gitleaks/gitleaks-action exige une licence payante sur les dépôts
@@ -32,7 +32,7 @@ jobs:
     name: Clé de signature développeur absente du dépôt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Vérifier qu'aucune clé (.der/.pem) n'est suivie par Git
         run: |
           set -euo pipefail
@@ -48,7 +48,7 @@ jobs:
     name: Analyse statique des scripts Shell
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # .specify/scripts/bash/ est de l'outillage vendored (template speckit), pas du code
       # applicatif AeroPollen : la porte bloquante ne réagit qu'aux erreurs réelles (injection,
       # syntaxe). Les avertissements de style pré-existants sont affichés à titre informatif
@@ -63,7 +63,7 @@ jobs:
     name: Validation XML des manifestes Connect IQ
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Installer xmllint
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
       - name: Valider le bon format XML de tous les manifestes/ressources
