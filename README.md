@@ -1,14 +1,19 @@
 # AeroPollen
 
-Deux champs de données Connect IQ pour Garmin Edge 530, affichant la qualité de l'air et les
-niveaux de pollens à la position courante, à partir de l'[Open-Meteo Air Quality
-API](https://open-meteo.com/en/docs/air-quality-api) (gratuite, sans clé requise).
+Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge, affichant la qualité de
+l'air et les niveaux de pollens à la position courante, à partir de l'[Open-Meteo Air Quality
+API](https://open-meteo.com/en/docs/air-quality-api) (gratuite, sans clé requise). Développé et
+validé sur **Edge 530** ; voir [Appareils pris en charge](#appareils-pris-en-charge) pour le
+détail par appareil.
 
+[![Sécurité](https://github.com/aboigues/aeropollen/actions/workflows/security.yml/badge.svg)](https://github.com/aboigues/aeropollen/actions/workflows/security.yml)
+[![Tests](https://github.com/aboigues/aeropollen/actions/workflows/tests.yml/badge.svg)](https://github.com/aboigues/aeropollen/actions/workflows/tests.yml)
 [![Licence : GPL v3](https://img.shields.io/badge/Licence-GPLv3-blue.svg)](LICENSE)
 
 ## Sommaire
 
 - [Fonctionnalités](#fonctionnalités)
+- [Appareils pris en charge](#appareils-pris-en-charge)
 - [Structure du projet](#structure-du-projet)
 - [Prérequis](#prérequis)
 - [Compilation](#compilation)
@@ -31,6 +36,24 @@ API](https://open-meteo.com/en/docs/air-quality-api) (gratuite, sans clé requis
   plateforme Connect IQ (voir `specs/001-pollen-air-datafield/research.md`).
 - Chaque champ est une application Connect IQ **installable et testable indépendamment** de
   l'autre — un `manifest.xml` Connect IQ ne peut déclarer qu'un seul `<iq:application>`.
+
+## Appareils pris en charge
+
+Les manifestes déclarent les appareils Edge suivants (mêmes exigences d'API minimale). Seul
+**Edge 530** est réellement compilé, testé (41 tests `Toybox.Test`, voir [Tests](#tests)) et
+validé par un sideload physique — les autres sont une extension raisonnable par famille de
+produit, **non vérifiée** :
+
+| Appareil | Statut |
+|---|---|
+| Edge 530 | ✅ Testé (simulateur + appareil physique) |
+| Edge 540, 550 | ⚠️ Déclaré, non vérifié |
+| Edge 830, 840, 850 | ⚠️ Déclaré, non vérifié |
+| Edge 1030 Plus, 1040, 1050 | ⚠️ Déclaré, non vérifié |
+| Edge Explore 2, Edge MTB | ⚠️ Déclaré, non vérifié |
+
+Un retour d'expérience (issue GitHub) sur un appareil non vérifié est bienvenu — voir
+[Contribuer](#contribuer).
 
 ## Structure du projet
 

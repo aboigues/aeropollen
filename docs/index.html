@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AeroPollen — Qualité de l'air et pollens pour Garmin Edge</title>
+<meta name="description" content="Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge : qualité de l'air et niveaux de pollens à la position courante.">
+<style>
+  :root {
+    --blue: #1E88E5;
+    --green: #43A047;
+    --bg: #ffffff;
+    --bg-alt: #f4f6f8;
+    --text: #1a1d21;
+    --text-muted: #5b6470;
+    --border: #e2e6ea;
+    --card-bg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a;
+      --bg-alt: #1b1f23;
+      --text: #eef1f4;
+      --text-muted: #9aa4b0;
+      --border: #2a2f35;
+      --card-bg: #1e2226;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  a { color: var(--blue); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.5rem; }
+
+  header.hero {
+    padding: 4rem 0 3rem;
+    text-align: center;
+    background: linear-gradient(180deg, var(--bg-alt), var(--bg));
+    border-bottom: 1px solid var(--border);
+  }
+  .icons { display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .icons svg { width: 56px; height: 56px; }
+  h1 { font-size: 2.4rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+  .tagline { color: var(--text-muted); font-size: 1.15rem; max-width: 34rem; margin: 0 auto 1.75rem; }
+  .cta { display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.4rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+
+  main { padding: 3.5rem 0; }
+  section + section { margin-top: 3.5rem; }
+  h2 { font-size: 1.5rem; margin: 0 0 1.25rem; }
+  .badge-status {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--bg-alt);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.4rem;
+  }
+  .card .dot {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+  .card .dot.air { background: var(--blue); }
+  .card .dot.pollen { background: var(--green); }
+  .card .dot svg { width: 18px; height: 18px; }
+  .card h3 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+
+  ol.steps { padding-left: 1.2rem; }
+  ol.steps li { margin-bottom: 0.9rem; }
+  code {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.88em;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-weight: 600; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 0 3rem;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+  footer a { color: var(--text-muted); text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="icons">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Qualité Air">
+        <circle cx="12" cy="12" r="11" fill="#1E88E5"/>
+        <path d="M5.5 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        <path d="M5.5 12.3h10.4a2.1 2.1 0 1 1-1.7 3.4" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        <path d="M5.5 15.6h6" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      </svg>
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Pollens">
+        <circle cx="12" cy="12" r="11" fill="#43A047"/>
+        <circle cx="12" cy="12" r="2.3" fill="#FFFFFF"/>
+        <circle cx="12" cy="6.6" r="1.5" fill="#FFFFFF"/>
+        <circle cx="17.4" cy="12" r="1.5" fill="#FFFFFF"/>
+        <circle cx="12" cy="17.4" r="1.5" fill="#FFFFFF"/>
+        <circle cx="6.6" cy="12" r="1.5" fill="#FFFFFF"/>
+      </svg>
+    </div>
+    <h1>AeroPollen</h1>
+    <p class="tagline">
+      Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge : qualité de l'air et
+      niveaux de pollens à votre position, en direct, pendant l'effort.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/aboigues/aeropollen/releases/latest">Télécharger la dernière version</a>
+      <a class="btn btn-secondary" href="https://github.com/aboigues/aeropollen">Voir le code source</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2>Deux champs, chacun installable indépendamment</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="dot air">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <path d="M2 12.3h10.4a2.1 2.1 0 1 1-1.7 3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+          </svg>
+        </div>
+        <h3>Qualité de l'air</h3>
+        <p>Indice européen de qualité de l'air (European AQI) à la position GPS courante, mis à
+        jour en arrière-plan pendant l'activité.</p>
+      </div>
+      <div class="card">
+        <div class="dot pollen">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="2.3" fill="#FFFFFF"/>
+            <circle cx="12" cy="6.6" r="1.5" fill="#FFFFFF"/>
+            <circle cx="17.4" cy="12" r="1.5" fill="#FFFFFF"/>
+            <circle cx="12" cy="17.4" r="1.5" fill="#FFFFFF"/>
+            <circle cx="6.6" cy="12" r="1.5" fill="#FFFFFF"/>
+          </svg>
+        </div>
+        <h3>Pollens</h3>
+        <p>Score de pollen global (bouleau, graminées, ambroisie, olivier...) à votre position,
+        pour anticiper les zones à risque allergique.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Installation</h2>
+    <ol class="steps">
+      <li>Télécharger les fichiers <code>.prg</code> de la <a href="https://github.com/aboigues/aeropollen/releases/latest">dernière Release</a> (un par champ de données).</li>
+      <li>Connecter l'appareil Garmin en USB — il apparaît comme un volume de stockage nommé <code>GARMIN</code>.</li>
+      <li>Copier les fichiers <code>.prg</code> dans le dossier <code>Garmin/Apps/</code> de l'appareil.</li>
+      <li>Débrancher l'appareil (éjection propre recommandée), puis le redémarrer si besoin.</li>
+      <li>Sur l'appareil : <em>Menu → Profils d'activité → Écrans de données → Ajouter un champ</em>, puis chercher « AeroPollen Air » ou « AeroPollen Pollens ».</li>
+    </ol>
+    <p>
+      Pour compiler le projet soi-même ou contribuer, voir le
+      <a href="https://github.com/aboigues/aeropollen#readme">README du dépôt</a>.
+    </p>
+  </section>
+
+  <section>
+    <h2>Appareils pris en charge</h2>
+    <table>
+      <tr><th>Appareil</th><th>Statut</th></tr>
+      <tr><td>Edge 530</td><td>Testé (simulateur + appareil physique)</td></tr>
+      <tr><td>Edge 540, 550, 830, 840, 850</td><td>Déclaré compatible, non vérifié</td></tr>
+      <tr><td>Edge 1030 Plus, 1040, 1050</td><td>Déclaré compatible, non vérifié</td></tr>
+      <tr><td>Edge Explore 2, Edge MTB</td><td>Déclaré compatible, non vérifié</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Confidentialité</h2>
+    <p>
+      La position GPS courante est transmise, en HTTPS, à l'API publique
+      <a href="https://open-meteo.com/">Open-Meteo</a> à chaque rafraîchissement en arrière-plan
+      (au minimum toutes les 15 minutes pendant une activité), uniquement pour obtenir la
+      qualité de l'air et les niveaux de pollens à cette position. Aucune clé d'API, aucun
+      identifiant de compte, aucune donnée personnelle autre que la position n'est transmis.
+      Le dernier relevé est mis en cache localement sur l'appareil et n'est jamais transmis
+      ailleurs. Code source entièrement ouvert — voir
+      <a href="https://github.com/aboigues/aeropollen/blob/main/SECURITY_AUDIT.md">l'audit de sécurité</a>.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      AeroPollen est un logiciel libre distribué sous licence
+      <a href="https://github.com/aboigues/aeropollen/blob/main/LICENSE">GNU GPL-3.0</a>.
+      Données fournies par <a href="https://open-meteo.com/">Open-Meteo</a>. Non affilié à Garmin.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
