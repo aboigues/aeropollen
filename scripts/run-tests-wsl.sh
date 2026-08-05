@@ -59,9 +59,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Ni /workspace ni ~/.Garmin ne peuvent être montés en lecture seule : monkeyc écrit un
+# default.jungle dans le dossier du projet même quand -f est fourni, et génère aussi un
+# bin/default.jungle dans le dossier du SDK à sa toute première utilisation s'il est absent
+# (présent seulement une fois qu'un premier run l'a déjà généré, ce qui n'est jamais le cas
+# pour un SDK fraîchement téléchargé, comme en CI).
 docker run -d --name "$CONTAINER_NAME" \
-    -v "$HOME/.Garmin:/root/.Garmin:ro" \
-    -v "$REPO_ROOT:/workspace:ro" \
+    -v "$HOME/.Garmin:/root/.Garmin" \
+    -v "$REPO_ROOT:/workspace" \
     "$IMAGE_TAG" sleep infinity >/dev/null
 
 # Framebuffer virtuel + simulateur, démarrés une seule fois pour toutes les applications testées
