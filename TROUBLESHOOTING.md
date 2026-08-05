@@ -199,21 +199,43 @@ en CI (`.github/workflows/tests.yml`).
 
 ---
 
-## 10. `scripts/run-tests-wsl.sh` : flake occasionnel « Unable to connect to simulator »
+## 10. `scripts/run-tests-wsl.sh` : le binaire `simulator` segfaulte parfois sous WSL/Xvfb
 
-**Symptôme** : le script échoue parfois (sur environ 1 run sur 5-10, non systématique) avec
-`Unable to connect to simulator` juste après les deux `BUILD SUCCESSFUL`, sans lancer aucun
-test. Aucun conteneur résiduel trouvé (`docker ps -a` vide) — pas un problème de nettoyage entre
-deux runs.
+**Symptôme** : le script échoue de façon intermittente, sans lancer aucun test pour l'application
+concernée — soit avec `Unable to connect to simulator` (stderr), soit avec une sortie
+complètement vide après les `BUILD SUCCESSFUL`. Aucun conteneur résiduel trouvé (`docker ps -a`
+vide) — pas un problème de nettoyage entre deux runs.
 
-**Cause probable** : le délai fixe de 5 secondes entre le lancement du simulateur et le premier
-`monkeydo` (dans le script) est parfois insuffisant selon la charge de la machine hôte au moment
-du run (ex. d'autres processus Docker/Chrome en cours) — le simulateur n'a pas fini de démarrer
-dans Xvfb.
+**Hypothèse initiale (incomplète)** : délai fixe de 5 secondes insuffisant entre le lancement du
+simulateur et le premier `monkeydo`. Corrigée en remplaçant le `sleep` fixe par une attente
+active (socket X11 `/tmp/.X11-unix/X99`, puis connexion TCP à `127.0.0.1:1234` en boucle) — une
+amélioration réelle, mais qui n'était **pas la cause principale**.
 
-**Contournement actuel** : relancer le script suffit à chaque fois observé jusqu'ici.
+**Cause réelle confirmée** : le binaire `simulator` (propriétaire Garmin) **segfaulte**
+(`signal 11`) de façon intermittente sous cet environnement WSL/Xvfb — confirmé directement via
+`dmesg` sur l'hôte :
+```
+simulator[PID]: segfault at 60 ip 0x... sp 0x... error 4 in simulator[...]
+simulator: simulator: potentially unexpected fatal signal 11.
+```
+Le process devient un zombie (`<defunct>`) après coup ; `monkeydo` ne peut alors plus se
+connecter, d'où les symptômes observés. Reproduit à la fois lors de la réutilisation d'un même
+simulateur entre deux `monkeydo` consécutifs (cas rencontré en CI, PR #8) et sur un simulateur
+frais avec attente généreuse (10 s) avant le premier `monkeydo` (cas reproduit localement,
+100 % du temps sur une session WSL très chargée après plusieurs heures d'usage intensif —
+possible dégradation de session liée à l'accumulation de processus Docker/X11 au fil d'une
+longue journée de travail, non confirmée comme cause exacte). Aucun lien de cause à effet établi
+avec le code de l'application elle-même (reproduit avec plusieurs `.prg` différents).
 
-**Amélioration possible, non implémentée** : remplacer le `sleep 5` fixe par une boucle de
-vérification active (ex. tenter une connexion TCP à `127.0.0.1:1234` en boucle avec un timeout,
-plutôt qu'une attente fixe) — à faire si ce flake devient gênant en pratique (notamment en CI, où
-la charge de la machine est encore moins prévisible).
+**Mitigation implémentée** (pas une vraie correction, le bug est dans un binaire propriétaire
+sans code source disponible) : `scripts/run-tests-wsl.sh` relance désormais Xvfb + simulateur à
+neuf pour **chaque** application (au lieu d'un simulateur partagé pour tout le run), avec
+jusqu'à 3 tentatives par application si le cycle précédent n'a produit aucun résultat
+PASSED/FAILED exploitable.
+
+**Non résolu** : cette mitigation absorbe le cas « échec occasionnel isolé » (celui rencontré en
+CI), mais pas un environnement où le simulateur crashe de façon quasi systématique (celui
+reproduit localement en fin de session ce jour-là) — dans ce cas, seul un redémarrage de
+l'environnement WSL/Docker semble une piste plausible, non testée par manque de temps. À
+surveiller si le taux d'échec en CI (environnement toujours frais, a priori moins exposé à ce
+second cas) reste anormalement élevé malgré cette mitigation.

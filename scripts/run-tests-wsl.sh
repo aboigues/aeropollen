@@ -69,17 +69,6 @@ docker run -d --name "$CONTAINER_NAME" \
     -v "$REPO_ROOT:/workspace" \
     "$IMAGE_TAG" sleep infinity >/dev/null
 
-# Framebuffer virtuel + simulateur, démarrés une seule fois pour toutes les applications testées
-# (le simulateur reste actif entre plusieurs monkeydo successifs, usage normal de l'outil).
-docker exec -d "$CONTAINER_NAME" bash -c "Xvfb :99 -screen 0 1280x1024x24 >/tmp/xvfb.log 2>&1"
-sleep 1
-docker exec -d "$CONTAINER_NAME" bash -c "
-    export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-    export DISPLAY=:99
-    simulator >/tmp/simulator.log 2>&1
-"
-sleep 5
-
 overall_status=0
 declare -a summary=()
 
@@ -98,21 +87,84 @@ for app in "${apps[@]}"; do
         continue
     fi
 
-    log_file="/tmp/aeropollen-test-$app.log"
-    # monkeydo retourne toujours le code de sortie 1, même quand tous les tests passent — le
-    # résultat réel s'obtient en lisant la dernière ligne de la sortie standard
-    # (PASSED/FAILED), pas via son code de sortie.
-    docker exec "$CONTAINER_NAME" bash -c "
-        export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-        export DISPLAY=:99
-        monkeydo /tmp/build/$app/app.prg $DEVICE -t
-    " | tee "$log_file"
+    # Le binaire simulator (propriétaire Garmin) segfaulte parfois sous WSL/Xvfb, de façon
+    # intermittente et sans lien avec le timing (confirmé via dmesg : "segfault ... in
+    # simulator", signal 11) — voir TROUBLESHOOTING.md §10. Cause hors de notre contrôle (pas de
+    # code source), donc mitigation par nouvelles tentatives : simulateur relancé à neuf à chaque
+    # tentative, avec attente active (socket X11 puis port TCP) plutôt qu'un sleep fixe.
+    max_attempts=3
+    attempt=1
+    last_line=""
+    got_result=false
 
-    last_line=$(tail -1 "$log_file")
-    if [[ "$last_line" == PASSED* ]]; then
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if [ "$attempt" -gt 1 ]; then
+            echo "--- tentative $attempt/$max_attempts (simulateur probablement crashé, voir TROUBLESHOOTING.md §10) ---"
+        fi
+
+        docker exec "$CONTAINER_NAME" bash -c "pkill -f bin/simulator; pkill -f 'Xvfb :99'; exit 0" >/dev/null 2>&1
+        docker exec -d "$CONTAINER_NAME" bash -c "Xvfb :99 -screen 0 1280x1024x24 >/tmp/xvfb.log 2>&1"
+
+        if ! docker exec "$CONTAINER_NAME" bash -c '
+            for i in $(seq 1 30); do
+                [ -S /tmp/.X11-unix/X99 ] && exit 0
+                sleep 0.5
+            done
+            exit 1
+        '; then
+            echo "Xvfb non prêt après 15s"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        docker exec -d "$CONTAINER_NAME" bash -c "
+            export PATH=\"$sdk_path_in_container/bin:\$PATH\"
+            export DISPLAY=:99
+            simulator >/tmp/simulator.log 2>&1
+        "
+
+        if ! docker exec "$CONTAINER_NAME" bash -c '
+            for i in $(seq 1 40); do
+                if (exec 3<>/dev/tcp/127.0.0.1/1234) 2>/dev/null; then
+                    exec 3<&- 3>&-
+                    exit 0
+                fi
+                sleep 0.5
+            done
+            exit 1
+        '; then
+            echo "Simulateur non joignable sur 127.0.0.1:1234 après 20s"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        log_file="/tmp/aeropollen-test-$app.log"
+        # monkeydo retourne toujours le code de sortie 1, même quand tous les tests passent — le
+        # résultat réel s'obtient en lisant la dernière ligne de la sortie standard
+        # (PASSED/FAILED), pas via son code de sortie.
+        docker exec "$CONTAINER_NAME" bash -c "
+            export PATH=\"$sdk_path_in_container/bin:\$PATH\"
+            export DISPLAY=:99
+            monkeydo /tmp/build/$app/app.prg $DEVICE -t
+        " | tee "$log_file"
+
+        last_line=$(tail -1 "$log_file")
+        if [[ "$last_line" == PASSED* || "$last_line" == FAILED* ]]; then
+            got_result=true
+            break
+        fi
+
+        # Sortie vide ou inattendue : le simulateur a très probablement crashé pendant ce cycle.
+        attempt=$((attempt + 1))
+    done
+
+    if [ "$got_result" = true ] && [[ "$last_line" == PASSED* ]]; then
         summary+=("$app : $last_line")
+    elif [ "$got_result" = true ]; then
+        summary+=("$app : $last_line")
+        overall_status=1
     else
-        summary+=("$app : $last_line")
+        summary+=("$app : ÉCHEC après $max_attempts tentatives (simulateur instable, voir TROUBLESHOOTING.md §10)")
         overall_status=1
     fi
     echo
