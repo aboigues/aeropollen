@@ -12,6 +12,7 @@ bin/*.debug.xml.zip
 # Divers
 .DS_Store
 *.log
+tmp/
 
 # Configuration/état locaux de Claude Code (spécifiques à la machine)
 .claude/settings.local.json

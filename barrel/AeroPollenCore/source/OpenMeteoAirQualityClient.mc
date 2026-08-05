@@ -14,6 +14,12 @@ module AeroPollenCore {
         private const BASE_URL = "https://air-quality-api.open-meteo.com/v1/air-quality";
         private const HOURLY_PARAMS =
             "european_aqi,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen";
+        // Sans limite, Open-Meteo renvoie 5 jours de données horaires (120 points x 7 variables),
+        // largement de quoi dépasser le budget mémoire de 32 Ko du Background Service une fois
+        // parsé en objets Monkey C (NETWORK_RESPONSE_OUT_OF_MEMORY, -403 — retour terrain
+        // 2026-08-05, voir TROUBLESHOOTING.md). Seule l'heure courante est exploitée
+        // (findCurrentHourIndex) : 6 heures de marge suffisent très largement.
+        private const FORECAST_HOURS = 6;
 
         private var _latitude as Float?;
         private var _longitude as Float?;
@@ -35,7 +41,8 @@ module AeroPollenCore {
                 "latitude" => latitude,
                 "longitude" => longitude,
                 "hourly" => HOURLY_PARAMS,
-                "timezone" => "auto"
+                "timezone" => "auto",
+                "forecast_hours" => FORECAST_HOURS
             };
 
             var options = {
@@ -48,6 +55,9 @@ module AeroPollenCore {
         // Callback de Communications.makeWebRequest (contracts/open-meteo-air-quality.md,
         // Conditions d'échec).
         public function onResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+            new DebugStatus().record(responseCode);
+
             var latitude = _latitude;
             var longitude = _longitude;
             var reading = (latitude == null || longitude == null)

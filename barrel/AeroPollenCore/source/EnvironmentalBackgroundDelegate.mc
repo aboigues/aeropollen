@@ -36,11 +36,15 @@ module AeroPollenCore {
             // d'enregistrement (Moment ou Duration) à l'origine de ce réveil précis.
             Background.registerForTemporalEvent(new Time.Duration(REFRESH_INTERVAL_SECONDS));
 
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+            new DebugStatus().recordBaseline();
+
             var location = currentLocation();
 
             if (location == null) {
                 // FR-010 : aucune position GPS exploitable -> aucune requête réseau, état
                 // "indisponible" immédiat.
+                new DebugStatus().record(AeroPollenCore.DEBUG_NO_GPS_FIX);
                 new EnvironmentalReadingStore().markUnavailable();
                 Background.exit(null);
                 return;

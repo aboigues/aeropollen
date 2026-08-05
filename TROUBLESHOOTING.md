@@ -273,3 +273,153 @@ diagnostic (contenu des logs, `ps aux`, état des fichiers verrou) **avant** de 
 nouvelle hypothèse, pas après plusieurs correctifs infructueux — chaque round de « ça ne marche
 toujours pas » sans données nouvelles n'était qu'une supposition de plus, jusqu'à ce que le
 `ps aux` et `/proc/<pid>/cmdline` réels tranchent la question sans ambiguïté.
+
+---
+
+## 11. Champs bloqués sur `N/D` en usage réel malgré 43/43 tests automatisés au vert
+
+**Symptôme** : sur Edge 530 physique, les deux champs restent en permanence à `N/D`, y compris
+après le correctif du premier relevé quasi immédiat (§ courant), malgré une suite de tests
+`Toybox.Test` intégralement verte (couvrant la logique de compute/cache/parsing, mais ni la
+connectivité réelle, ni le budget mémoire réel du Background Service — hors de portée du
+simulateur/des tests unitaires).
+
+**Démarche** : ajout d'un module `DebugStatus` (temporaire, voir commit dédié) qui mémorise le
+code réel retourné à chaque étape (position GPS absente, ou code de réponse
+`Communications.makeWebRequest`) et l'affiche **à la place de** `N/D`, pour obtenir un signal
+exploitable directement sur l'appareil sans accès à un débogueur.
+
+**Codes obtenus, dans l'ordre, en conditions réelles (2026-08-05)** :
+1. `-999` (jamais exécuté) sur un champ jamais affiché à l'écran au moins une fois — confirmé
+   sans lien avec un bug une fois l'écran effectivement consulté sur l'appareil.
+2. `-104` (`Communications.BLE_CONNECTION_UNAVAILABLE`, doc `Toybox.Communications` : *"No BLE
+   connection is available"*) — pas de connexion Bluetooth active entre l'Edge et le téléphone au
+   moment de la tentative. Résolu côté utilisateur (reconnexion Bluetooth + ajout du WiFi direct
+   en complément).
+3. `-403` (`Communications.NETWORK_RESPONSE_OUT_OF_MEMORY`, doc `Toybox.Communications` : *"Ran
+   out of memory processing network response"*) — **bug applicatif réel**, cf. ci-dessous.
+
+**Cause du `-403`** : la requête envoyée à Open-Meteo ne limitait pas la période de prévision.
+Sans paramètre `forecast_hours`/`forecast_days`, l'API renvoie par défaut **5 jours de données
+horaires** (120 points × 7 variables `hourly`, vérifié par appel direct à l'API : 6247 octets
+JSON bruts). Une fois parsé en objets Monkey C (Dictionary/Array/Number avec un surcoût mémoire
+par objet bien supérieur à la taille JSON brute), cette réponse dépasse largement le budget
+mémoire du Background Service (32 Ko, cf. `research.md` §10) — d'où
+`NETWORK_RESPONSE_OUT_OF_MEMORY`. Le code applicatif n'exploite pourtant que l'entrée
+correspondant à l'heure courante (`findCurrentHourIndex`) : tout le reste de la réponse était
+inutilement téléchargé et parsé.
+
+**Correction** : ajout du paramètre `forecast_hours=6` à la requête (voir
+`OpenMeteoAirQualityClient.mc` et `contracts/open-meteo-air-quality.md`). Vérifié par appel
+direct à l'API : 6 points horaires, 829 octets bruts au lieu de 120 points/6247 octets — largement
+sous le budget mémoire, avec une marge de 6 h autour de l'heure courante (contre 1h de marge
+stricte qui suffirait, mais fragile face à un léger retard réseau).
+
+**Confirmation finale sur appareil (2026-08-05)** : après déploiement du correctif, les deux champs
+affichent de façon stable `-104/F17 B18` — c'est-à-dire ~17-18 Ko de mémoire libre à chaque étape
+(baseline et après réception), largement au-dessus du seuil qui déclenchait le `-403` avant
+correctif. Le `-104` (Bluetooth) subsiste seul : il ne s'agit pas d'un défaut du code mais d'un
+aléa de connectivité environnementale (Edge 530 ↔ téléphone), déjà documenté au point 2 ci-dessus.
+Le module `DebugStatus` ayant rempli son rôle de diagnostic, il a été entièrement retiré une fois
+la cause confirmée et corrigée ; seul le paramètre `forecast_hours=6` (correctif permanent) a été
+conservé.
+
+**Leçon retenue** : les tests automatisés (simulateur) ne peuvent pas détecter un dépassement du
+budget mémoire réel du Background Service ni un problème de connectivité réelle — seule la
+validation sur appareil physique (§8) l'a révélé. Un module de diagnostic temporaire affichant le
+code d'erreur réel directement à l'écran (plutôt que le "N/D" générique) a permis d'isoler la
+cause en quelques itérations plutôt que de deviner à l'aveugle, avant d'être retiré une fois son
+rôle rempli.
+
+## 12. Reprise du § 11 : N/D persistant malgré Bluetooth connecté — investigation interrompue, état à reprendre
+
+**Contexte** : après le retrait du module `DebugStatus` (§11), nouveau signalement en conditions
+réelles : "N/D" persistant malgré un téléphone connecté en Bluetooth avec Garmin Connect Mobile
+actif en arrière-plan, cette fois **pendant une activité enregistrée** (donc GPS actif, `compute()`
+bien appelé — écarte l'hypothèse d'un simple défaut de rafraîchissement de l'écran hors activité).
+
+**Démarche reprise** : réintroduction de `DebugStatus` (même mécanisme qu'au §11 : code
+label/value réparti pour éviter la troncature) + branchement dans `EnvironmentalBackgroundDelegate`
+et `OpenMeteoAirQualityClient`.
+
+**Étape 1 — code obtenu `-999` (jamais exécuté) sur les deux apps, y compris `F-1 B-1`** (aucune
+valeur du tout en mémoire, donc `recordBaseline()` — première ligne de `onTemporalEvent()` —
+n'avait **jamais tourné** depuis la réinstallation). Diagnostic : `onTemporalEvent()` du Background
+Service ne s'est pas déclenché du tout depuis le sideload.
+
+**Hypothèse retenue** : la garde `if (Background.getTemporalEventRegisteredTime() == null)` dans
+`AirQualityFieldApp.initialize()`/`PollenFieldApp.initialize()` (ajoutée pour le correctif "premier
+relevé immédiat", cf. commit dédié) ne se déclenche qu'à la **toute première** inscription d'un
+événement temporel pour cet ID d'application. Or cette inscription est un état **système**,
+indépendant du binaire `.PRG` : elle persiste à travers les réinstallations par sideload. Comme
+l'app avait déjà été inscrite lors des sessions de test précédentes, la réinstallation ne redéclenche
+plus le relevé immédiat — elle dépend de l'échéance déjà programmée par le tout premier lancement
+(potentiellement très ancienne/passée pendant que l'appareil était éteint, avec un comportement de
+rattrapage au redémarrage non garanti par la documentation `Toybox.Background`).
+
+**Étape 2 — expérimentation** : `Background.registerForTemporalEvent(Time.now())` rendu
+**inconditionnel** (à chaque `initialize()`, plutôt que seulement si aucun événement n'est déjà
+enregistré) pour forcer un relevé immédiat à chaque réinstallation de debug. **Risque identifié a
+posteriori** : la documentation `Toybox.Background` interdit plus d'un enregistrement par tranche de
+5 minutes, sauf pour l'inscription réellement première — `initialize()` s'exécute à chaque
+(re)chargement de l'app (pas seulement une fois par activité), donc cet appel inconditionnel peut
+violer cette règle dès qu'il est ré-exécuté deux fois en moins de 5 minutes.
+
+**Symptôme suivant** : après ce second déploiement, les deux champs affichent le **logo de
+l'application à la place d'une valeur** — signe classique côté Garmin d'un champ de données qui n'a
+pas pu se charger/s'est arrêté sur erreur. Un redémarrage complet de l'appareil (pas juste un
+débranchement USB) puis un retrait/ré-ajout du champ sur l'écran de données n'ont **pas** résolu le
+symptôme.
+
+**Piste secondaire trouvée, non confirmée** : `Garmin/Debugging/Saved/err_log_101.txt` et
+`err_log_102.txt` contiennent deux crashs firmware (`"error_cause":"RTL Trap"`) avec une signature
+**identique** (mêmes adresses de fonction, même `RTL Error Number: 6E5D8024`), horodatés à quelques
+minutes des deux derniers redéploiements (`19:25:29` et `19:59:21` le 2026-08-05). **Point notable** :
+`"Task Name":"SYC main"` — la tâche système de synchronisation/stockage de masse, pas la tâche `IQ`
+qui exécute les apps Connect IQ. Cela pourrait indiquer un accroc du firmware pendant le traitement
+du transfert USB des `.PRG` plutôt qu'un crash de notre code Monkey C — mais la corrélation
+temporelle avec nos deux changements de code (garde conditionnelle vs inconditionnelle sur
+`registerForTemporalEvent`) est troublante et n'a pas été départagée. Les fichiers
+`Garmin/Apps/Media/AeroPollenAir.PRG`/`AeroPollenPollen.PRG` montrent un traitement réussi peu après
+chaque crash (nouveaux horodatages cohérents), ce qui suggère que l'app a bien fini par s'installer
+malgré le crash `SYC`.
+
+**État du code au moment de l'arrêt (2026-08-05, non commité sur `fix/immediate-first-refresh`)** :
+- `barrel/AeroPollenCore/source/DebugStatus.mc` : **réintroduit** (nouveau fichier, non commité).
+- `barrel/AeroPollenCore/source/EnvironmentalBackgroundDelegate.mc` : appelle
+  `DebugStatus().recordBaseline()`/`.record(AeroPollenCore.DEBUG_NO_GPS_FIX)`.
+- `barrel/AeroPollenCore/source/OpenMeteoAirQualityClient.mc` : appelle `DebugStatus().record(responseCode)`
+  dans `onResponse()`, en plus du correctif permanent `forecast_hours=6` (à conserver).
+- `aeropollen-air-quality-field/source/AirQualityFieldView.mc` et
+  `aeropollen-pollen-field/source/PollenFieldView.mc` : `onUpdate()` affiche le code de debug
+  (label/value) à la place de "N/D" quand `_reading.isUnavailable()`.
+- `aeropollen-air-quality-field/source/AirQualityFieldApp.mc` et
+  `aeropollen-pollen-field/source/PollenFieldApp.mc` : `Background.registerForTemporalEvent(Time.now())`
+  **inconditionnel** (garde `if (getTemporalEventRegisteredTime() == null)` retirée) — **suspect
+  principal pour le crash `SYC`, à revenir à la version gardée avant toute nouvelle investigation**.
+
+**Pistes à explorer la prochaine fois, dans l'ordre suggéré** :
+1. Revenir à la garde conditionnelle sur `registerForTemporalEvent` (annuler l'expérimentation de
+   l'étape 2) avant de retester quoi que ce soit d'autre — c'est le changement le plus susceptible
+   d'avoir causé une violation de la règle des 5 minutes.
+2. Tester un déploiement qui **ne touche pas** au code de l'app (ex. copier un fichier bidon dans
+   `Garmin/Apps/`) pour voir si un crash `SYC main` identique se reproduit uniquement à cause du
+   transfert USB — isolerait le sideload lui-même comme cause, indépendamment de notre code.
+3. Tester si le symptôme "logo à la place de la valeur" apparaît **même sans** `DebugStatus` (avec
+   le build de production propre du §11) après une réinstallation — isolerait le code de debug
+   réintroduit comme cause plutôt que le sideload en général.
+4. Si le logo persiste même avec un build propre : envisager une désinstallation complète
+   (retrait de l'app via le menu Garmin) suivie d'une réinstallation fraîche plutôt qu'un simple
+   écrasement du `.PRG`, pour repartir d'un état système totalement vierge (aucun événement
+   temporel déjà enregistré, aucun cache Storage résiduel).
+5. Une fois le champ à nouveau fonctionnel (vraie valeur ou vrai "N/D" sans logo), reprendre le
+   diagnostic du §11 : whether `-104` (Bluetooth) est toujours le code obtenu malgré un téléphone
+   connecté — creuser alors spécifiquement pourquoi `Communications.makeWebRequest` échoue en BLE
+   au moment précis du réveil programmé, malgré une connexion visiblement active côté téléphone
+   (piste plausible, non vérifiée : le rayon Bluetooth de l'Edge peut être mis en veille par
+   l'appareil entre les activités/déplacements, indépendamment de l'état affiché dans Garmin
+   Connect Mobile).
+
+**Rappel** : les deux PR (#8 et son équivalent pour le fix mémoire) restent **volontairement
+ouvertes**, non mergées — investigation en cours, rien n'est prêt à merger tant que le symptôme
+"logo" n'est pas résolu.

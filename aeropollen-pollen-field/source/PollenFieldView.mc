@@ -54,7 +54,18 @@ class PollenFieldView extends WatchUi.DataField {
             value.setColor(Graphics.COLOR_BLACK);
         }
 
-        value.setText(displayValueFor(_reading));
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : remplace "N/D" par le dernier code obtenu,
+        // réparti label/value pour éviter la troncature (voir TROUBLESHOOTING.md §11).
+        if (_reading.isUnavailable()) {
+            var debugStatus = new AeroPollenCore.DebugStatus();
+            (View.findDrawableById("label") as Text).setText(
+                debugStatus.readCode().toString() + "/F" + debugStatus.readBaselineFreeKB().toString()
+            );
+            value.setText("B" + debugStatus.readFinalFreeKB().toString());
+        } else {
+            (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
+            value.setText(displayValueFor(_reading));
+        }
 
         View.onUpdate(dc);
     }

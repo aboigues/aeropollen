@@ -15,6 +15,12 @@ fixe le sous-ensemble utilisé et les garanties attendues côté application.
   - `hourly` : `european_aqi,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen`
   - `timezone` : `auto` (pour aligner l'horodatage retourné sur la position interrogée, cf.
     exigence « à l'heure et à l'endroit exacte » de la description de la fonctionnalité)
+  - `forecast_hours` : `6` — **obligatoire**. Sans cette limite, Open-Meteo renvoie par défaut 5
+    jours de données horaires (120 points × 7 variables), dépassant le budget mémoire de 32 Ko du
+    Background Service une fois parsé en objets Monkey C
+    (`Communications.NETWORK_RESPONSE_OUT_OF_MEMORY`, code `-403` — constaté en usage réel,
+    2026-08-05, voir `TROUBLESHOOTING.md`). Seule l'heure courante est exploitée
+    (`findCurrentHourIndex`), 6 heures de marge suffisent très largement.
 - **Authentification** : aucune (usage non commercial, cf. research.md §4 et §8)
 - **Transport** : HTTPS obligatoire (Principe II de la constitution)
 - **Déclenchement** : uniquement depuis le Background Service (research.md §3), jamais depuis le

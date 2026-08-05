@@ -12,14 +12,11 @@ class PollenFieldApp extends Application.AppBase {
     function initialize() {
         AppBase.initialize();
 
-        if (Background.getTemporalEventRegisteredTime() == null) {
-            // Premier lancement : Background.registerForTemporalEvent() avec un Moment déjà
-            // passé déclenche l'événement quasi immédiatement (doc Toybox.Background), plutôt
-            // que d'attendre REFRESH_INTERVAL_SECONDS avant le tout premier relevé.
-            // EnvironmentalBackgroundDelegate reprogramme ensuite le rythme normal de 15 minutes
-            // dès ce premier réveil.
-            Background.registerForTemporalEvent(Time.now());
-        }
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : forcé à chaque lancement (au lieu de
+        // seulement si aucun événement n'est déjà enregistré) pour garantir un relevé immédiat
+        // à chaque réinstallation de debug, sans dépendre de l'échéance déjà programmée par une
+        // installation précédente. À revenir à la condition d'origine une fois le diagnostic fini.
+        Background.registerForTemporalEvent(Time.now());
     }
 
     // Cf. research.md §11 : contournement nécessaire lorsqu'une vue non annotée est référencée
