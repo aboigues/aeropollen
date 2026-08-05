@@ -1,0 +1,6 @@
+# DL3008 (épingler les versions apt) est volontairement ignorée : cette image sert uniquement
+# à exécuter les tests localement/en CI (docker/test-runner.Dockerfile), jamais distribuée ni
+# utilisée en production — la reproductibilité stricte des versions de paquets système n'a pas
+# le même enjeu que pour une image livrée à des utilisateurs. Voir SECURITY_AUDIT.md.
+ignored:
+  - DL3008

@@ -14,7 +14,9 @@ jobs:
     name: Tests Toybox.Test (monkeydo -t)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Le SDK Connect IQ est téléchargeable directement, sans authentification (vérifié
       # 2026-08-05, voir aeropollen-next-steps en mémoire du projet). Le catalogue sdks.json

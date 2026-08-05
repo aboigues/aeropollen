@@ -1,0 +1,85 @@
+name: Code Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Hebdomadaire : capte les nouvelles règles/vulnérabilités découvertes sur du code inchangé
+    # (CodeQL lui-même ne supporte pas Monkey C, d'où ces trois outils ciblés à la place — voir
+    # SECURITY_AUDIT.md).
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: zizmor (sécurité des workflows GitHub Actions)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # uvx n'est pas garanti préinstallé sur le runner (constaté en pratique, malgré la
+      # documentation zizmor qui suppose sa présence) : installation explicite via l'action
+      # officielle plutôt que de deviner ce qui est disponible.
+      - name: Installer uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Analyser les workflows
+        run: uvx zizmor --format=sarif .github/workflows > zizmor.sarif
+      - name: Publier les résultats dans l'onglet Security
+        uses: github/codeql-action/upload-sarif@9e3211c9a3b9311dfe05da2ed48eea3386f042dd # v4.37.6
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+
+  hadolint:
+    name: hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Analyser le Dockerfile
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint \
+            hadolint --config docker/.hadolint.yaml --format sarif docker/test-runner.Dockerfile \
+            > hadolint.sarif
+      - name: Publier les résultats dans l'onglet Security
+        uses: github/codeql-action/upload-sarif@9e3211c9a3b9311dfe05da2ed48eea3386f042dd # v4.37.6
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+
+  shellcheck-sarif:
+    name: shellcheck (scripts Shell, remonté en Code Scanning)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # shellcheck n'a pas de sortie SARIF native (contrairement à zizmor et hadolint) : conversion
+      # via shellcheck-sarif. Le job "Analyse statique des scripts Shell" de security.yml reste la
+      # porte bloquante (shellcheck -S error) ; celui-ci ne fait que remonter les résultats dans
+      # l'onglet Security, il n'échoue jamais volontairement (cf. || true).
+      - name: Installer shellcheck-sarif
+        run: cargo install shellcheck-sarif --locked
+      - name: Générer le rapport SARIF
+        run: |
+          shellcheck -f json .specify/scripts/bash/*.sh scripts/*.sh | shellcheck-sarif > shellcheck.sarif || true
+      - name: Publier les résultats dans l'onglet Security
+        uses: github/codeql-action/upload-sarif@9e3211c9a3b9311dfe05da2ed48eea3386f042dd # v4.37.6
+        with:
+          sarif_file: shellcheck.sarif
+          category: shellcheck
