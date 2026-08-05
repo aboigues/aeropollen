@@ -89,10 +89,19 @@ Deux méthodes :
 ## Tests
 
 Chaque projet embarque ses tests d'intégration (`Toybox.Test`) dans son dossier `tests/`.
-Exécution via le simulateur Connect IQ (`monkeydo -t`) — nécessite un environnement avec rendu
-graphique fonctionnel. **Non disponible sous WSL sans périphérique GPU** (`/dev/dri` absent) —
-voir [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) pour le détail de cette limitation et les pistes
-écartées.
+Exécution via le simulateur Connect IQ (`monkeydo -t`). Fonctionne nativement sur Windows/macOS ;
+sous Linux/WSL, le simulateur a besoin d'un serveur X — utiliser **Xvfb** (framebuffer virtuel
+logiciel, aucun GPU requis) plutôt que le display réel. Un script prêt à l'emploi automatise
+toute la procédure (Docker + Xvfb + compilation + `monkeydo -t`) :
+
+```bash
+scripts/run-tests-wsl.sh                          # toutes les applications
+scripts/run-tests-wsl.sh aeropollen-pollen-field   # une seule application
+```
+
+Voir
+[`TROUBLESHOOTING.md` §9](TROUBLESHOOTING.md#9-résolution-du-5--xvfb-au-lieu-du-display-réel-wslg--exécution-réelle-des-tests-obtenue)
+pour le détail de la découverte et le fonctionnement exact.
 
 ## Documentation
 

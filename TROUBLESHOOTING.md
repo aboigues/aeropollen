@@ -74,23 +74,24 @@ Appliqué à l'identique dans `aeropollen-air-quality-field` et `aeropollen-poll
 
 ---
 
-## 5. Simulateur bloqué indéfiniment après `Debug: SetLayout` — absence de GPU sous WSL
+## 5. Simulateur apparemment bloqué après `Debug: SetLayout` sous WSL — **faux mur, résolu (§9)**
 
 **Symptôme** : `bin/simulator` et `bin/shell` établissent correctement une connexion TCP
-(`127.0.0.1:1234`), mais le rendu visuel de la fenêtre du simulateur ne se termine jamais
-(bloqué après `Debug: SetLayout`, sans erreur). `monkeydo -t` reste donc bloqué indéfiniment
-sans jamais produire de résultat PASS/FAIL pour les tests `Toybox.Test`.
+(`127.0.0.1:1234`), le dernier message affiché par le simulateur est `Debug: SetLayout`, sans
+erreur ni message suivant. En pointant `DISPLAY` vers le display réel partagé par WSLg
+(`DISPLAY=:0`), `monkeydo -t` ne renvoyait jamais de résultat PASS/FAIL dans nos premiers essais.
 
-**Cause confirmée (investiguée à deux reprises, sur deux versions de SDK, avec et sans
-Docker)** : absence totale de périphérique GPU dans cet environnement WSL — `/dev/dri` et
-`/dev/dxg` n'existent pas, ni sur l'hôte ni dans un conteneur Docker partageant le même display.
-Le simulateur (binaire natif GTK/WebKit) dépend du rendu accéléré fourni normalement par WSLg
-via Mesa/DirectX ; sans nœud de périphérique GPU, ce chemin de rendu est indisponible.
+**Hypothèse initiale (incorrecte, voir §9)** : absence totale de périphérique GPU dans cet
+environnement WSL — `/dev/dri` et `/dev/dxg` n'existent bel et bien pas, ni sur l'hôte ni dans
+un conteneur Docker partageant le display WSLg réel. Cette hypothèse a été investiguée à deux
+reprises (SDK 9.2.0 et 8.2.3, avec et sans Docker) et semblait chaque fois se confirmer.
 
-**Statut** : **non résolu sous WSL, considéré comme un mur dur.** Aucune version de SDK ni
-configuration Docker ne contourne ce problème (voir §7 pour la piste écartée). L'exécution
-réelle des tests `Toybox.Test` doit se faire sur Windows (simulateur natif fonctionnel) ou
-directement sur l'appareil physique (voir §8).
+**Statut** : **résolu, voir §9** — `Debug: SetLayout` est en réalité le dernier message de log
+normal du simulateur (il l'affiche aussi dans les cas qui fonctionnent), pas un indicateur de
+blocage. Le vrai problème était de pointer `DISPLAY` vers le display WSLg réel (qui a besoin
+d'accélération GPU) plutôt que vers un framebuffer virtuel logiciel (Xvfb), qui n'a besoin
+d'aucun GPU. Cette entrée est conservée pour la traçabilité de l'investigation, mais la
+conclusion « mur dur, aller sur Windows » qu'elle contenait à l'origine était fausse.
 
 ---
 
@@ -157,5 +158,41 @@ matériel plutôt que d'attendre un accès à un poste Windows.
    le nom déclaré dans `Rez.Strings.AppName`.
 
 **Limite** : valide le comportement réel de l'application (écran, mise à jour, permissions),
-mais ne fait **pas** tourner les assertions automatisées `Toybox.Test` (celles-ci nécessitent
-toujours le simulateur — Windows ou un environnement WSL avec accès GPU).
+mais ne fait pas tourner les assertions automatisées `Toybox.Test` (celles-ci nécessitent le
+simulateur — voir §9 pour la procédure qui fonctionne désormais aussi sous WSL).
+
+---
+
+## 9. Résolution du §5 : Xvfb au lieu du display réel WSLg — exécution réelle des tests obtenue
+
+**Contexte** : en explorant si un émulateur/bouchon communautaire existait pour les appareils
+Garmin (le projet ne peut pas être le seul à vouloir faire tourner des tests Connect IQ en CI),
+découverte du dépôt public
+[matco/connectiq-tester](https://github.com/matco/connectiq-tester) — image Docker qui exécute
+les tests « Run No Evil » (= `monkeydo -t`, le nom donné à cette fonctionnalité depuis
+l'ancien plugin Eclipse) en CI. Son `tester.sh` lance le simulateur sous **Xvfb**
+(`Xvfb :1 -screen 0 1280x1024x24`) plutôt que sur un display réel — détail jamais testé dans nos
+investigations précédentes (toujours `DISPLAY=:0`, le display WSLg réel).
+
+**Test effectué** : conteneur Docker `ubuntu:20.04` identique aux essais précédents
+(`libwebkit2gtk-4.0-37`, `openjdk-11-jre` non-headless — cf. §6), avec en plus `xvfb`. Simulateur
+lancé avec `DISPLAY=:99` pointant vers `Xvfb :99 -screen 0 1280x1024x24`, **pas** vers le
+display WSLg. `monkeydo bin/app.prg edge530 -t` exécuté ensuite normalement.
+
+**Résultat** : succès complet, sur les deux applications —
+`aeropollen-air-quality-field` : `PASSED (passed=20, failed=0, errors=0)`,
+`aeropollen-pollen-field` : `PASSED (passed=21, failed=0, errors=0)`. Le simulateur affiche bien
+`Debug: SetLayout` comme dernier message de log (ce n'était donc pas un indicateur de blocage,
+juste le dernier log émis avant que le simulateur passe en écoute silencieuse), et répond
+normalement aux requêtes TCP de `monkeydo`.
+
+**Piège à noter** : `monkeydo` retourne toujours un code de sortie `1`, même quand tous les
+tests passent (`PASSED`) — il faut donc parser la sortie standard (dernière ligne commençant par
+`PASSED`/`FAILED`) plutôt que se fier au code de sortie du process. Documenté aussi dans le
+`tester.sh` de `matco/connectiq-tester`.
+
+**Conclusion** : le §5 (et la recommandation de `[[aeropollen-next-steps]]` d'attendre Windows)
+sont **obsolètes**. L'exécution réelle des tests `Toybox.Test` fonctionne désormais sous WSL, à
+condition d'utiliser Xvfb plutôt que le display WSLg réel. Non encore automatisé dans un script
+réutilisable du dépôt à cette date — prochaine étape naturelle si cette procédure doit être
+répétée souvent.
