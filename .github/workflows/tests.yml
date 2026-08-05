@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  toybox-tests:
+    name: Tests Toybox.Test (monkeydo -t)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Le SDK Connect IQ est téléchargeable directement, sans authentification (vérifié
+      # 2026-08-05, voir aeropollen-next-steps en mémoire du projet). Le catalogue sdks.json
+      # évite de coder en dur un nom de fichier versionné qui deviendrait obsolète.
+      - name: Télécharger le SDK Connect IQ Linux (dernière version)
+        run: |
+          set -euo pipefail
+          catalog_url="https://developer.garmin.com/downloads/connect-iq/sdks"
+          version=$(curl -fsSL "$catalog_url/sdks.json" | jq -r '.[].version' | sort -V | tail -1)
+          filename=$(curl -fsSL "$catalog_url/sdks.json" | jq -r --arg v "$version" '.[] | select(.version==$v) | .linux')
+          sdk_name="${filename%.zip}"
+          echo "SDK : $sdk_name"
+          mkdir -p "$HOME/.Garmin/ConnectIQ/Sdks/$sdk_name"
+          curl -fsSL "$catalog_url/$filename" -o /tmp/sdk.zip
+          unzip -q /tmp/sdk.zip -d "$HOME/.Garmin/ConnectIQ/Sdks/$sdk_name"
+
+      # Les fichiers d'appareil Garmin (edge530) ne sont pas téléchargeables publiquement (pas
+      # d'URL stable trouvée, contrairement au SDK — voir TROUBLESHOOTING.md). Ils sont donc
+      # stockés comme asset d'une Release GitHub privée de ce dépôt (voir sa description pour le
+      # contexte de licence : redeviendrait public avec le dépôt si sa visibilité change un jour).
+      - name: Télécharger les fichiers d'appareil edge530 (Release privée du dépôt)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.Garmin/ConnectIQ/Devices"
+          gh release download connectiq-devices-edge530-v1 \
+            --repo "${{ github.repository }}" \
+            --pattern 'edge530.zip' \
+            --dir /tmp
+          unzip -q /tmp/edge530.zip -d "$HOME/.Garmin/ConnectIQ/Devices"
+
+      - name: Générer une clé de signature de test
+        run: |
+          openssl genrsa -out /tmp/key.pem 4096
+          openssl pkcs8 -topk8 -inform PEM -outform DER -in /tmp/key.pem -out developer_key.der -nocrypt
+
+      # Réutilise exactement le même script/image que les développeurs en local (voir
+      # TROUBLESHOOTING.md §9 et README.md § Tests) : aucune logique dupliquée entre CI et local.
+      # Invoqué via "bash" plutôt que "./" : ce dépôt vit sur un système de fichiers où
+      # core.fileMode est désactivé (drvfs/NTFS côté développement), le bit d'exécution stocké
+      # par Git n'est donc pas fiable à 100% — voir le correctif dans ce même commit.
+      - name: Exécuter les tests réels (Docker + Xvfb + monkeydo -t)
+        run: bash scripts/run-tests-wsl.sh
