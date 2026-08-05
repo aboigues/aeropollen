@@ -18,6 +18,7 @@ détail par appareil.
 - [Prérequis](#prérequis)
 - [Compilation](#compilation)
 - [Installation sur l'appareil](#installation-sur-lappareil)
+- [Publication sur le Connect IQ Store](#publication-sur-le-connect-iq-store)
 - [Tests](#tests)
 - [Documentation](#documentation)
 - [Confidentialité](#confidentialité)
@@ -108,6 +109,29 @@ Deux méthodes :
    en l'ajoutant depuis Menu → Profils d'activité → Écrans de données → Ajouter un champ. Voir
    [`TROUBLESHOOTING.md` §8](TROUBLESHOOTING.md#8-alternative-validée--sideload-direct-sur-lappareil-physique-edge-530)
    pour la procédure détaillée (y compris depuis WSL).
+
+## Publication sur le Connect IQ Store
+
+Le Store attend un package `.iq` (pas `.prg`), qui bundle la compilation pour **tous** les
+appareils déclarés dans le manifeste — équivalent du « Export Project » de l'extension VS Code
+Monkey C. Un script génère les deux packages :
+
+```bash
+scripts/build-store-package.sh                          # les deux applications -> dist/*.iq
+scripts/build-store-package.sh aeropollen-pollen-field   # une seule application
+```
+
+Chaque application (un seul `<iq:application>` par manifeste) nécessite sa **propre fiche
+Store** — pas de soumission groupée possible. Étapes ensuite :
+
+1. Créer un compte [Garmin Developer](https://developer.garmin.com/) (distinct du SDK).
+2. Uploader chaque `.iq` sur le [portail de soumission](https://apps.garmin.com/en-US/developer/upload).
+3. Renseigner description, captures d'écran et icône dédiée **500×500px sRGB** (différente de
+   l'icône embarquée sur l'appareil, 35×35).
+4. Attendre la revue Garmin (app invisible publiquement tant qu'elle est en attente).
+
+Lire les [Developer Guidelines](https://developer.garmin.com/connect-iq/app-review-guidelines/)
+avant soumission.
 
 ## Tests
 
