@@ -4,221 +4,481 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AeroPollen — Qualité de l'air et pollens pour Garmin Edge</title>
-<meta name="description" content="Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge : qualité de l'air et niveaux de pollens à la position courante.">
+<meta name="description" content="Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge : qualité de l'air et niveaux de pollens à la position courante, en direct pendant l'effort.">
+<meta property="og:title" content="AeroPollen — Qualité de l'air et pollens pour Garmin Edge">
+<meta property="og:description" content="Deux champs de données Connect IQ open source pour cyclocomputeurs Garmin Edge.">
+<meta property="og:type" content="website">
 <style>
   :root {
     --blue: #1E88E5;
+    --blue-dark: #1565C0;
     --green: #43A047;
+    --green-dark: #2E7D32;
     --bg: #ffffff;
     --bg-alt: #f4f6f8;
+    --bg-alt-2: #eef1f4;
     --text: #1a1d21;
     --text-muted: #5b6470;
     --border: #e2e6ea;
     --card-bg: #ffffff;
+    --screen-bg: #f7fbff;
+    --bezel: #23262b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #14171a;
       --bg-alt: #1b1f23;
+      --bg-alt-2: #21262b;
       --text: #eef1f4;
       --text-muted: #9aa4b0;
       --border: #2a2f35;
       --card-bg: #1e2226;
+      --screen-bg: #eef4fa;
+      --bezel: #0c0d0f;
     }
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
-    line-height: 1.55;
+    line-height: 1.6;
   }
   a { color: var(--blue); }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.5rem; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 1.5rem; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 0 0 0.6rem;
+  }
 
-  header.hero {
-    padding: 4rem 0 3rem;
-    text-align: center;
-    background: linear-gradient(180deg, var(--bg-alt), var(--bg));
+  nav.topnav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
   }
-  .icons { display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; }
-  .icons svg { width: 56px; height: 56px; }
-  h1 { font-size: 2.4rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
-  .tagline { color: var(--text-muted); font-size: 1.15rem; max-width: 34rem; margin: 0 auto 1.75rem; }
-  .cta { display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  nav.topnav .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 0.8rem; padding-bottom: 0.8rem; }
+  nav.topnav .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
+  nav.topnav .brand svg { width: 22px; height: 22px; }
+  nav.topnav ul { list-style: none; display: flex; gap: 1.4rem; margin: 0; padding: 0; }
+  nav.topnav a.navlink { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 600; }
+  nav.topnav a.navlink:hover { color: var(--text); }
+  nav.topnav .navlist { display: none; }
+  @media (min-width: 700px) { nav.topnav .navlist { display: flex; } }
+
+  header.hero {
+    padding: 3.5rem 0 3rem;
+    text-align: center;
+    background:
+      radial-gradient(60% 60% at 20% 0%, color-mix(in srgb, var(--blue) 12%, transparent), transparent),
+      radial-gradient(55% 55% at 85% 10%, color-mix(in srgb, var(--green) 12%, transparent), transparent),
+      var(--bg);
+  }
+  .icons { display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.4rem; }
+  .icons svg { width: 52px; height: 52px; }
+  h1 { font-size: clamp(2rem, 4vw, 2.7rem); margin: 0 0 0.6rem; letter-spacing: -0.02em; }
+  .tagline { color: var(--text-muted); font-size: 1.15rem; max-width: 36rem; margin: 0 auto 1.75rem; }
+  .cta { display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; margin-bottom: 0.9rem; }
   .btn {
     display: inline-block;
-    padding: 0.65rem 1.4rem;
+    padding: 0.7rem 1.5rem;
     border-radius: 8px;
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 0.95rem;
+    transition: transform 0.15s ease;
   }
+  .btn:hover { transform: translateY(-1px); }
   .btn-primary { background: var(--blue); color: #fff; }
   .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .trust-line { color: var(--text-muted); font-size: 0.82rem; }
+  .trust-line a { color: inherit; text-decoration: underline; }
 
-  main { padding: 3.5rem 0; }
-  section + section { margin-top: 3.5rem; }
-  h2 { font-size: 1.5rem; margin: 0 0 1.25rem; }
-  .badge-status {
-    display: inline-block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    background: var(--bg-alt);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    margin-bottom: 1rem;
-  }
+  .badges { display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin: 1.4rem 0 0; }
+  .badges img { height: 20px; display: block; }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  /* Mockups des écrans d'appareil */
+  .mockups { display: flex; justify-content: center; gap: 1.6rem; flex-wrap: wrap; margin: 2.4rem 0 0.4rem; }
+  .mockup { width: 168px; }
+  .mockup svg { width: 100%; height: auto; filter: drop-shadow(0 10px 24px rgba(0,0,0,0.18)); }
+  .mockup-caption { text-align: center; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.5rem; }
+
+  main { padding: 4rem 0; }
+  section { padding: 3.5rem 0; }
+  section.alt { background: var(--bg-alt); }
+  section .wrap > h2 { text-align: center; }
+  section .section-lede { text-align: center; color: var(--text-muted); max-width: 40rem; margin: -0.5rem auto 2.2rem; }
+  h2 { font-size: 1.7rem; margin: 0 0 1.25rem; letter-spacing: -0.01em; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.1rem; }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.4rem;
+    border-radius: 14px;
+    padding: 1.5rem;
   }
   .card .dot {
-    width: 34px; height: 34px; border-radius: 50%;
+    width: 36px; height: 36px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.85rem;
   }
   .card .dot.air { background: var(--blue); }
   .card .dot.pollen { background: var(--green); }
-  .card .dot svg { width: 18px; height: 18px; }
+  .card .dot svg { width: 19px; height: 19px; }
   .card h3 { margin: 0 0 0.4rem; font-size: 1.05rem; }
   .card p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
 
-  ol.steps { padding-left: 1.2rem; }
-  ol.steps li { margin-bottom: 0.9rem; }
+  .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.4rem; counter-reset: step; }
+  .step { text-align: center; }
+  .step .num {
+    counter-increment: step;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--bg-alt-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 0.8rem;
+    font-weight: 700; font-size: 1.05rem;
+  }
+  .step .num::before { content: counter(step); }
+  .step h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+  .step p { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+
+  ol.steps-list { padding-left: 1.2rem; max-width: 42rem; margin: 0 auto; }
+  ol.steps-list li { margin-bottom: 0.9rem; }
   code {
-    background: var(--bg-alt);
+    background: var(--bg-alt-2);
     border: 1px solid var(--border);
     border-radius: 5px;
     padding: 0.1rem 0.4rem;
     font-size: 0.88em;
   }
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-  th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; max-width: 42rem; margin: 0 auto; }
+  th, td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); }
   th { color: var(--text-muted); font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-size: 0.82rem; font-weight: 600;
+    padding: 0.22rem 0.6rem; border-radius: 999px;
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .pill-tested { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green-dark); }
+  .pill-tested::before { background: var(--green); }
+  .pill-unverified { background: var(--bg-alt-2); color: var(--text-muted); }
+  .pill-unverified::before { background: var(--text-muted); }
+
+  .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.1rem; max-width: 52rem; margin: 0 auto; }
+  .trust-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 1.4rem; }
+  .trust-card .dot { width: 34px; height: 34px; border-radius: 50%; background: var(--bg-alt-2); display: flex; align-items: center; justify-content: center; margin-bottom: 0.8rem; }
+  .trust-card .dot svg { width: 17px; height: 17px; }
+  .trust-card h3 { margin: 0 0 0.4rem; font-size: 0.98rem; }
+  .trust-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+
+  .faq { max-width: 44rem; margin: 0 auto; }
+  .faq details {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 0;
+  }
+  .faq summary {
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-size: 1.3rem; color: var(--text-muted); flex-shrink: 0; }
+  .faq details[open] summary::after { content: "−"; }
+  .faq p { color: var(--text-muted); margin: 0.7rem 0 0; font-size: 0.92rem; }
 
   footer {
     border-top: 1px solid var(--border);
-    padding: 2rem 0 3rem;
+    padding: 2.2rem 0 3rem;
     color: var(--text-muted);
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     text-align: center;
   }
   footer a { color: var(--text-muted); text-decoration: underline; }
+  footer .foot-links { margin-top: 0.6rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
 
+<nav class="topnav">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="11" fill="#1E88E5"/>
+        <path d="M5.5 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+        <path d="M5.5 15.6h6" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      </svg>
+      AeroPollen
+    </div>
+    <ul class="navlist">
+      <li><a class="navlink" href="#fonctionnalites">Fonctionnalités</a></li>
+      <li><a class="navlink" href="#comment-ca-marche">Fonctionnement</a></li>
+      <li><a class="navlink" href="#installation">Installation</a></li>
+      <li><a class="navlink" href="#confiance">Sécurité</a></li>
+      <li><a class="navlink" href="#faq">FAQ</a></li>
+    </ul>
+    <a class="btn btn-primary" style="padding:0.45rem 1rem;font-size:0.85rem;" href="https://github.com/aboigues/aeropollen/releases/latest">Télécharger</a>
+  </div>
+</nav>
+
 <header class="hero">
   <div class="wrap">
-    <div class="icons">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Qualité Air">
-        <circle cx="12" cy="12" r="11" fill="#1E88E5"/>
-        <path d="M5.5 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-        <path d="M5.5 12.3h10.4a2.1 2.1 0 1 1-1.7 3.4" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-        <path d="M5.5 15.6h6" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-      </svg>
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Pollens">
-        <circle cx="12" cy="12" r="11" fill="#43A047"/>
-        <circle cx="12" cy="12" r="2.3" fill="#FFFFFF"/>
-        <circle cx="12" cy="6.6" r="1.5" fill="#FFFFFF"/>
-        <circle cx="17.4" cy="12" r="1.5" fill="#FFFFFF"/>
-        <circle cx="12" cy="17.4" r="1.5" fill="#FFFFFF"/>
-        <circle cx="6.6" cy="12" r="1.5" fill="#FFFFFF"/>
-      </svg>
-    </div>
-    <h1>AeroPollen</h1>
+    <p class="eyebrow">Gratuit · Open source · Sans compte</p>
+    <h1>Respirez avant de pédaler</h1>
     <p class="tagline">
-      Deux champs de données Connect IQ pour cyclocomputeurs Garmin Edge : qualité de l'air et
-      niveaux de pollens à votre position, en direct, pendant l'effort.
+      AeroPollen affiche la qualité de l'air et les niveaux de pollens directement sur votre
+      Garmin Edge, à votre position, mis à jour automatiquement pendant l'effort — sans sortir
+      votre téléphone.
     </p>
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/aboigues/aeropollen/releases/latest">Télécharger la dernière version</a>
       <a class="btn btn-secondary" href="https://github.com/aboigues/aeropollen">Voir le code source</a>
     </div>
+    <p class="trust-line">
+      100% gratuit · code entièrement ouvert (GPL-3.0) · audité et testé automatiquement à
+      chaque changement
+    </p>
+    <div class="badges">
+      <a href="https://github.com/aboigues/aeropollen/actions/workflows/security.yml"><img src="https://github.com/aboigues/aeropollen/actions/workflows/security.yml/badge.svg" alt="Statut Sécurité"></a>
+      <a href="https://github.com/aboigues/aeropollen/actions/workflows/tests.yml"><img src="https://github.com/aboigues/aeropollen/actions/workflows/tests.yml/badge.svg" alt="Statut Tests"></a>
+      <a href="https://github.com/aboigues/aeropollen/blob/main/LICENSE"><img src="https://img.shields.io/badge/Licence-GPLv3-blue.svg" alt="Licence GPL-3.0"></a>
+    </div>
+
+    <div class="mockups">
+      <div class="mockup">
+        <svg viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aperçu du champ Qualité Air sur l'écran d'un Garmin Edge">
+          <rect x="4" y="4" width="192" height="252" rx="26" fill="#23262b"/>
+          <rect x="16" y="16" width="168" height="228" rx="16" fill="#f7fbff"/>
+          <rect x="16" y="16" width="168" height="8" rx="4" fill="#1E88E5"/>
+          <text x="100" y="70" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="13" font-weight="700" letter-spacing="1" fill="#5b6470">QUALITÉ AIR</text>
+          <text x="100" y="150" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="66" font-weight="700" fill="#1a1d21">42</text>
+          <text x="100" y="180" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#5b6470">European AQI · Bon</text>
+          <circle cx="100" cy="216" r="5" fill="#1E88E5"/>
+          <circle cx="115" cy="216" r="5" fill="#e2e6ea"/>
+          <circle cx="130" cy="216" r="5" fill="#e2e6ea"/>
+        </svg>
+        <p class="mockup-caption">Champ « AeroPollen Air »</p>
+      </div>
+      <div class="mockup">
+        <svg viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aperçu du champ Pollens sur l'écran d'un Garmin Edge">
+          <rect x="4" y="4" width="192" height="252" rx="26" fill="#23262b"/>
+          <rect x="16" y="16" width="168" height="228" rx="16" fill="#f7fbff"/>
+          <rect x="16" y="16" width="168" height="8" rx="4" fill="#43A047"/>
+          <text x="100" y="70" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="13" font-weight="700" letter-spacing="1" fill="#5b6470">POLLENS</text>
+          <text x="100" y="150" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="66" font-weight="700" fill="#1a1d21">18</text>
+          <text x="100" y="180" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#5b6470">Score global · Modéré</text>
+          <circle cx="100" cy="216" r="5" fill="#43A047"/>
+          <circle cx="115" cy="216" r="5" fill="#e2e6ea"/>
+          <circle cx="130" cy="216" r="5" fill="#e2e6ea"/>
+        </svg>
+        <p class="mockup-caption">Champ « AeroPollen Pollens »</p>
+      </div>
+    </div>
   </div>
 </header>
 
-<main class="wrap">
+<main>
 
-  <section>
-    <h2>Deux champs, chacun installable indépendamment</h2>
-    <div class="cards">
-      <div class="card">
-        <div class="dot air">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-            <path d="M2 12.3h10.4a2.1 2.1 0 1 1-1.7 3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-          </svg>
+  <section id="fonctionnalites">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Pourquoi AeroPollen</p>
+      <h2>L'info qui manque sur votre compteur</h2>
+      <p class="section-lede">
+        Votre Edge affiche déjà votre vitesse, votre fréquence cardiaque, votre dénivelé. Il ne
+        vous dit jamais si l'air que vous respirez à cet instant précis est bon à respirer, ou
+        si le taux de pollens va déclencher votre allergie à mi-parcours.
+      </p>
+      <div class="cards">
+        <div class="card">
+          <div class="dot air">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 9h8.3a2.1 2.1 0 1 0-1.7-3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+              <path d="M2 12.3h10.4a2.1 2.1 0 1 1-1.7 3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            </svg>
+          </div>
+          <h3>Qualité de l'air en direct</h3>
+          <p>Indice européen de qualité de l'air (European AQI) calculé à votre position GPS
+          exacte, pas à la station de mesure la plus proche à 30 km.</p>
         </div>
-        <h3>Qualité de l'air</h3>
-        <p>Indice européen de qualité de l'air (European AQI) à la position GPS courante, mis à
-        jour en arrière-plan pendant l'activité.</p>
-      </div>
-      <div class="card">
-        <div class="dot pollen">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="2.3" fill="#FFFFFF"/>
-            <circle cx="12" cy="6.6" r="1.5" fill="#FFFFFF"/>
-            <circle cx="17.4" cy="12" r="1.5" fill="#FFFFFF"/>
-            <circle cx="12" cy="17.4" r="1.5" fill="#FFFFFF"/>
-            <circle cx="6.6" cy="12" r="1.5" fill="#FFFFFF"/>
-          </svg>
+        <div class="card">
+          <div class="dot pollen">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="2.3" fill="#FFFFFF"/>
+              <circle cx="12" cy="6.6" r="1.5" fill="#FFFFFF"/>
+              <circle cx="17.4" cy="12" r="1.5" fill="#FFFFFF"/>
+              <circle cx="12" cy="17.4" r="1.5" fill="#FFFFFF"/>
+              <circle cx="6.6" cy="12" r="1.5" fill="#FFFFFF"/>
+            </svg>
+          </div>
+          <h3>Alerte pollens</h3>
+          <p>Score de pollen global (bouleau, graminées, ambroisie, olivier...) pour anticiper
+          les zones à risque avant que les yeux ne piquent.</p>
         </div>
-        <h3>Pollens</h3>
-        <p>Score de pollen global (bouleau, graminées, ambroisie, olivier...) à votre position,
-        pour anticiper les zones à risque allergique.</p>
+        <div class="card">
+          <div class="dot air" style="background:var(--text-muted);">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3v7M12 21v-7M3 12h7M21 12h-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Zéro friction</h3>
+          <p>Mise à jour automatique en arrière-plan pendant l'activité. Pas de bouton à
+          appuyer, pas d'app à ouvrir, pas de ralentissement de votre GPS.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section>
-    <h2>Installation</h2>
-    <ol class="steps">
-      <li>Télécharger les fichiers <code>.prg</code> de la <a href="https://github.com/aboigues/aeropollen/releases/latest">dernière Release</a> (un par champ de données).</li>
-      <li>Connecter l'appareil Garmin en USB — il apparaît comme un volume de stockage nommé <code>GARMIN</code>.</li>
-      <li>Copier les fichiers <code>.prg</code> dans le dossier <code>Garmin/Apps/</code> de l'appareil.</li>
-      <li>Débrancher l'appareil (éjection propre recommandée), puis le redémarrer si besoin.</li>
-      <li>Sur l'appareil : <em>Menu → Profils d'activité → Écrans de données → Ajouter un champ</em>, puis chercher « AeroPollen Air » ou « AeroPollen Pollens ».</li>
-    </ol>
-    <p>
-      Pour compiler le projet soi-même ou contribuer, voir le
-      <a href="https://github.com/aboigues/aeropollen#readme">README du dépôt</a>.
-    </p>
+  <section class="alt" id="comment-ca-marche">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Fonctionnement</p>
+      <h2>Simple, discret, fiable</h2>
+      <div class="steps-grid">
+        <div class="step">
+          <div class="num"></div>
+          <h3>Votre position</h3>
+          <p>Le GPS de votre Edge donne votre position courante pendant l'activité.</p>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <h3>Interrogation en arrière-plan</h3>
+          <p>Toutes les 15 minutes maximum, AeroPollen interroge Open-Meteo en HTTPS, sans
+          jamais bloquer l'affichage ni le tracking GPS.</p>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <h3>Affiché à l'écran</h3>
+          <p>La dernière valeur connue s'affiche instantanément sur votre écran de données,
+          jamais de temps de chargement.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section>
-    <h2>Appareils pris en charge</h2>
-    <table>
-      <tr><th>Appareil</th><th>Statut</th></tr>
-      <tr><td>Edge 530</td><td>Testé (simulateur + appareil physique)</td></tr>
-      <tr><td>Edge 540, 550, 830, 840, 850</td><td>Déclaré compatible, non vérifié</td></tr>
-      <tr><td>Edge 1030 Plus, 1040, 1050</td><td>Déclaré compatible, non vérifié</td></tr>
-      <tr><td>Edge Explore 2, Edge MTB</td><td>Déclaré compatible, non vérifié</td></tr>
-    </table>
+  <section id="installation">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Installation</p>
+      <h2>Prêt en 5 minutes</h2>
+      <ol class="steps-list">
+        <li>Télécharger les fichiers <code>.prg</code> de la <a href="https://github.com/aboigues/aeropollen/releases/latest">dernière Release</a> (un par champ de données).</li>
+        <li>Connecter l'appareil Garmin en USB — il apparaît comme un volume de stockage nommé <code>GARMIN</code>.</li>
+        <li>Copier les fichiers <code>.prg</code> dans le dossier <code>Garmin/Apps/</code> de l'appareil.</li>
+        <li>Débrancher l'appareil (éjection propre recommandée), puis le redémarrer si besoin.</li>
+        <li>Sur l'appareil : <em>Menu → Profils d'activité → Écrans de données → Ajouter un champ</em>, puis chercher « AeroPollen Air » ou « AeroPollen Pollens ».</li>
+      </ol>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.92rem;">
+        Pour compiler le projet soi-même ou contribuer, voir le
+        <a href="https://github.com/aboigues/aeropollen#readme">README du dépôt</a>.
+      </p>
+    </div>
   </section>
 
-  <section>
-    <h2>Confidentialité</h2>
-    <p>
-      La position GPS courante est transmise, en HTTPS, à l'API publique
-      <a href="https://open-meteo.com/">Open-Meteo</a> à chaque rafraîchissement en arrière-plan
-      (au minimum toutes les 15 minutes pendant une activité), uniquement pour obtenir la
-      qualité de l'air et les niveaux de pollens à cette position. Aucune clé d'API, aucun
-      identifiant de compte, aucune donnée personnelle autre que la position n'est transmis.
-      Le dernier relevé est mis en cache localement sur l'appareil et n'est jamais transmis
-      ailleurs. Code source entièrement ouvert — voir
-      <a href="https://github.com/aboigues/aeropollen/blob/main/SECURITY_AUDIT.md">l'audit de sécurité</a>.
-    </p>
+  <section class="alt">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Compatibilité</p>
+      <h2>Appareils pris en charge</h2>
+      <table>
+        <tr><th>Appareil</th><th>Statut</th></tr>
+        <tr><td>Edge 530</td><td><span class="pill pill-tested">Testé (simulateur + appareil physique)</span></td></tr>
+        <tr><td>Edge 540, 550, 830, 840, 850</td><td><span class="pill pill-unverified">Déclaré compatible, non vérifié</span></td></tr>
+        <tr><td>Edge 1030 Plus, 1040, 1050</td><td><span class="pill pill-unverified">Déclaré compatible, non vérifié</span></td></tr>
+        <tr><td>Edge Explore 2, Edge MTB</td><td><span class="pill pill-unverified">Déclaré compatible, non vérifié</span></td></tr>
+      </table>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.88rem;margin-top:1rem;">
+        Un retour d'expérience sur un appareil non vérifié est bienvenu —
+        <a href="https://github.com/aboigues/aeropollen/issues">ouvrir une issue</a>.
+      </p>
+    </div>
+  </section>
+
+  <section id="confiance">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Confiance</p>
+      <h2>Aucune raison de se méfier</h2>
+      <p class="section-lede">
+        Pas de compte à créer, pas de clé d'API, pas de service tiers caché. Tout ce que fait
+        AeroPollen est visible dans son code source, vérifié automatiquement à chaque
+        modification.
+      </p>
+      <div class="trust-grid">
+        <div class="trust-card">
+          <div class="dot"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="#1E88E5" stroke-width="1.8"/><path d="M8 11V7a4 4 0 0 1 8 0" stroke="#1E88E5" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+          <h3>Code entièrement ouvert</h3>
+          <p>Licence GNU GPL-3.0. Chaque ligne de code, chaque décision technique est publique
+          et documentée.</p>
+        </div>
+        <div class="trust-card">
+          <div class="dot"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" stroke="#1E88E5" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#1E88E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Audit de sécurité</h3>
+          <p>Audit complet du code (réseau, stockage, permissions) — aucune vulnérabilité
+          identifiée. Voir le <a href="https://github.com/aboigues/aeropollen/blob/main/SECURITY_AUDIT.md">rapport</a>.</p>
+        </div>
+        <div class="trust-card">
+          <div class="dot"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="#1E88E5" stroke-width="1.8"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="#1E88E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Testé à chaque changement</h3>
+          <p>41 tests automatisés exécutés à chaque modification, plus une analyse de sécurité
+          continue (détection de secrets, scan du code).</p>
+        </div>
+        <div class="trust-card">
+          <div class="dot"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21s-7-6.5-7-11.5A7 7 0 0 1 19 9.5C19 14.5 12 21 12 21z" stroke="#1E88E5" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9.5" r="2.3" stroke="#1E88E5" stroke-width="1.8"/><path d="M4 4l16 16" stroke="#1E88E5" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+          <h3>Position jamais revendue</h3>
+          <p>Votre position n'est envoyée qu'à Open-Meteo, pour la requête en cours, jamais
+          stockée ni transmise ailleurs. Voir le détail dans le
+          <a href="https://github.com/aboigues/aeropollen#confidentialit%C3%A9">README</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt" id="faq">
+    <div class="wrap">
+      <p class="eyebrow" style="text-align:center;">Questions fréquentes</p>
+      <h2>FAQ</h2>
+      <div class="faq">
+        <details>
+          <summary>Est-ce que ça consomme beaucoup de batterie ?</summary>
+          <p>La mise à jour se fait au maximum toutes les 15 minutes, en arrière-plan, sans
+          jamais garder le GPS ou l'écran allumés plus longtemps que d'habitude. L'impact est
+          comparable à n'importe quel champ de données utilisant le réseau.</p>
+        </details>
+        <details>
+          <summary>Pourquoi deux applications séparées plutôt qu'une seule ?</summary>
+          <p>C'est une contrainte de la plateforme Connect IQ : un fichier de manifeste ne peut
+          déclarer qu'une seule application. Les deux partagent tout leur code via une
+          bibliothèque commune (Monkey Barrel), mais s'installent et se configurent
+          indépendamment.</p>
+        </details>
+        <details>
+          <summary>Mes données GPS sont-elles vendues ou revendues ?</summary>
+          <p>Non. La position est envoyée uniquement à Open-Meteo (fournisseur de données
+          météo), en HTTPS, pour la requête en cours. Aucune clé d'API, aucun compte, aucun
+          tracking. Voir la section Confidentialité du README pour le détail complet.</p>
+        </details>
+        <details>
+          <summary>Est-ce gratuit et le restera-t-il ?</summary>
+          <p>Oui, entièrement gratuit, sous licence libre GPL-3.0. Le code appartient à la
+          communauté, pas à une entreprise — personne ne peut le rendre payant sans le forker
+          sous une autre licence.</p>
+        </details>
+        <details>
+          <summary>Puis-je contribuer ou signaler un bug ?</summary>
+          <p>Avec plaisir — le dépôt est ouvert aux
+          <a href="https://github.com/aboigues/aeropollen/issues">issues</a> et aux
+          <a href="https://github.com/aboigues/aeropollen/pulls">Pull Requests</a>. Voir la
+          section Contribuer du README pour les règles du projet.</p>
+        </details>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -230,6 +490,12 @@
       <a href="https://github.com/aboigues/aeropollen/blob/main/LICENSE">GNU GPL-3.0</a>.
       Données fournies par <a href="https://open-meteo.com/">Open-Meteo</a>. Non affilié à Garmin.
     </p>
+    <div class="foot-links">
+      <a href="https://github.com/aboigues/aeropollen">Code source</a>
+      <a href="https://github.com/aboigues/aeropollen/releases">Releases</a>
+      <a href="https://github.com/aboigues/aeropollen/issues">Issues</a>
+      <a href="https://github.com/aboigues/aeropollen/blob/main/SECURITY.md">Sécurité</a>
+    </div>
   </div>
 </footer>
 
