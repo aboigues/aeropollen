@@ -18,8 +18,8 @@ fixe le sous-ensemble utilisé et les garanties attendues côté application.
 - **Authentification** : aucune (usage non commercial, cf. research.md §4 et §8)
 - **Transport** : HTTPS obligatoire (Principe II de la constitution)
 - **Déclenchement** : uniquement depuis le Background Service (research.md §3), jamais depuis le
-  cycle de rendu du champ de données. Ce client (barrel `EnvironmentalCore`) est exécuté
-  indépendamment par chacune des deux applications (`air-quality-field`, `pollen-field`,
+  cycle de rendu du champ de données. Ce client (barrel `AeroPollenCore`) est exécuté
+  indépendamment par chacune des deux applications (`aeropollen-air-quality-field`, `aeropollen-pollen-field`,
   research.md §9) ; chacune interroge l'intégralité des paramètres `hourly` ci-dessous mais
   n'exploite que le sous-ensemble de la réponse qui la concerne.
 

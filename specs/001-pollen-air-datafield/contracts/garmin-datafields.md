@@ -7,13 +7,13 @@ IQ) par la fonctionnalité, conformément à FR-006 : deux champs de données di
 sélectionnable indépendamment par l'utilisateur via la configuration standard du compteur.
 
 **Correction d'architecture (research.md §9)** : chaque champ est une **application Connect IQ
-installée séparément** (`air-quality-field` et `pollen-field`), pas deux vues d'une même
+installée séparément** (`aeropollen-air-quality-field` et `aeropollen-pollen-field`), pas deux vues d'une même
 application — un `manifest.xml` Connect IQ ne peut déclarer qu'un seul `<iq:application>`. Les
-deux applications partagent leur code via le Barrel `EnvironmentalCore`, mais exécutent chacune
+deux applications partagent leur code via le Barrel `AeroPollenCore`, mais exécutent chacune
 leur propre Background Service et leur propre cache `Application.Storage` (isolé par
 application).
 
-## Champ 1 — Qualité de l'Air (application `air-quality-field`)
+## Champ 1 — Qualité de l'Air (application `aeropollen-air-quality-field`)
 
 - **Rôle** : afficher `Relevé Environnemental.indice_qualite_air` (European AQI) pour la
   position courante (User Story 1, FR-001).
@@ -25,7 +25,7 @@ application).
   (`Application.Storage`, research.md §5) ; ce champ ne déclenche jamais lui-même de requête
   réseau (FR-007).
 
-## Champ 2 — Pollens (application `pollen-field`)
+## Champ 2 — Pollens (application `aeropollen-pollen-field`)
 
 - **Rôle** : afficher `Relevé Environnemental.score_pollen_global` en vue principale, avec accès
   au détail par `Type de Pollen` (FR-002/FR-002a, User Story 2).

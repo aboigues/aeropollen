@@ -94,10 +94,10 @@ specs/001-pollen-air-datafield/
 **Correction d'architecture (research.md §9)** : Connect IQ ne permet qu'un seul
 `<iq:application>` par `manifest.xml` — deux champs de données indépendamment sélectionnables
 (FR-006) nécessitent donc **deux applications Connect IQ distinctes**, partageant leur code
-commun via un **Monkey Barrel** (`EnvironmentalCore`).
+commun via un **Monkey Barrel** (`AeroPollenCore`).
 
 ```text
-barrel/EnvironmentalCore/            # Monkey Barrel : code partagé par les 2 applications
+barrel/AeroPollenCore/            # Monkey Barrel : code partagé par les 2 applications
 ├── manifest.xml                     # Manifeste de type Barrel (annotations, produits supportés)
 ├── monkey.jungle                    # project.manifest = manifest.xml
 ├── source/
@@ -111,9 +111,9 @@ barrel/EnvironmentalCore/            # Monkey Barrel : code partagé par les 2 a
     ├── OpenMeteoAirQualityClientTest.mc
     └── EnvironmentalBackgroundDelegateTest.mc
 
-air-quality-field/                   # Application Connect IQ #1 : champ "Qualité de l'Air"
+aeropollen-air-quality-field/                   # Application Connect IQ #1 : champ "Qualité de l'Air"
 ├── manifest.xml                     # <iq:application type="datafield"> + <iq:barrels>
-├── monkey.jungle                    # project.manifest + base.barrelPath -> ../barrel/EnvironmentalCore
+├── monkey.jungle                    # project.manifest + base.barrelPath -> ../barrel/AeroPollenCore
 ├── resources/
 │   ├── strings/                     # Libellés français (dont "Indisponible")
 │   ├── drawables/                   # Icône du champ (menu de sélection Garmin)
@@ -124,7 +124,7 @@ air-quality-field/                   # Application Connect IQ #1 : champ "Qualit
 └── tests/
     └── AirQualityFieldIntegrationTest.mc  # Scénarios d'intégration simulateur (quickstart.md)
 
-pollen-field/                        # Application Connect IQ #2 : champ "Pollens"
+aeropollen-pollen-field/                        # Application Connect IQ #2 : champ "Pollens"
 ├── manifest.xml
 ├── monkey.jungle
 ├── resources/
@@ -140,8 +140,8 @@ pollen-field/                        # Application Connect IQ #2 : champ "Pollen
 
 **Structure Decision**: Trois projets Connect IQ à la racine du dépôt (pas de séparation
 frontend/backend au sens web — il s'agit d'applications embarquées exécutées sur l'appareil
-Garmin) : un Monkey Barrel (`barrel/EnvironmentalCore/`) portant tout le code et les tests
-partagés, et deux applications minces (`air-quality-field/`, `pollen-field/`) qui référencent ce
+Garmin) : un Monkey Barrel (`barrel/AeroPollenCore/`) portant tout le code et les tests
+partagés, et deux applications minces (`aeropollen-air-quality-field/`, `aeropollen-pollen-field/`) qui référencent ce
 Barrel et n'ajoutent que leur point d'entrée, leur vue d'affichage et leurs ressources propres.
 Chaque application exécute son propre Background Service et son propre cache local
 (`Application.Storage` étant isolé par application, research.md §9). Les tests colocalisés

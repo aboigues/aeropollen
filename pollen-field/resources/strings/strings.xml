@@ -1,6 +1,0 @@
-<strings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
-    <string id="AppName">Pollens</string>
-    <string id="FieldLabel">Pollens</string>
-    <string id="UnavailableValue">N/D</string>
-    <string id="NoPollenDataValue">Pas de donnée</string>
-</strings>
