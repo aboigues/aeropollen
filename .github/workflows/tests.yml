@@ -54,5 +54,8 @@ jobs:
 
       # Réutilise exactement le même script/image que les développeurs en local (voir
       # TROUBLESHOOTING.md §9 et README.md § Tests) : aucune logique dupliquée entre CI et local.
+      # Invoqué via "bash" plutôt que "./" : ce dépôt vit sur un système de fichiers où
+      # core.fileMode est désactivé (drvfs/NTFS côté développement), le bit d'exécution stocké
+      # par Git n'est donc pas fiable à 100% — voir le correctif dans ce même commit.
       - name: Exécuter les tests réels (Docker + Xvfb + monkeydo -t)
-        run: scripts/run-tests-wsl.sh
+        run: bash scripts/run-tests-wsl.sh
