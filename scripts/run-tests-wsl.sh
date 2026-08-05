@@ -88,14 +88,17 @@ for app in "${apps[@]}"; do
         continue
     fi
 
-    # Xvfb + simulateur relancés à neuf pour chaque tentative, sur un NUMÉRO DE DISPLAY JAMAIS
-    # RÉUTILISÉ (display_counter incrémenté à chaque essai, y compris entre applications) —
-    # cause réelle identifiée du problème initial : réutiliser le même display (:99) après avoir
-    # tué le Xvfb précédent laisse parfois un socket/verrou X11 périmé, qui fait échouer
-    # silencieusement le nouveau Xvfb tout en laissant croire au script qu'il est prêt (le
-    # fichier socket existant est celui, périmé, du précédent). Confirmé reproductible sur un
-    # runner GitHub Actions fraîchement provisionné (donc pas un problème de session locale
-    # vieillissante comme supposé initialement) — voir TROUBLESHOOTING.md §10.
+    # Xvfb + simulateur relancés à neuf pour chaque tentative, sur un numéro de display jamais
+    # réutilisé (display_counter incrémenté à chaque essai, y compris entre applications) — évite
+    # toute collision avec un socket/verrou X11 périmé.
+    #
+    # ATTENTION (régression déjà commise une fois, cf. TROUBLESHOOTING.md §10) : le binaire
+    # `simulator` écoute TOUJOURS sur le même port TCP fixe (1234), quel que soit le DISPLAY sur
+    # lequel il rend l'écran. Changer de display ne suffit donc PAS : le simulateur de la
+    # tentative précédente (ou de l'application précédente) doit être explicitement tué avant
+    # d'en lancer un nouveau, sinon le suivant ne peut jamais se lier au port 1234 — il démarre
+    # et log normalement ("Debug: SetLayout") mais son port n'est jamais joignable, sans aucune
+    # erreur explicite.
     max_attempts=3
     attempt=1
     last_line=""
@@ -107,6 +110,18 @@ for app in "${apps[@]}"; do
         if [ "$attempt" -gt 1 ]; then
             echo "--- tentative $attempt/$max_attempts (display $display) ---"
         fi
+
+        # Tue tout simulateur/Xvfb précédent (port 1234 fixe, cf. avertissement ci-dessus) avant
+        # d'en relancer un nouveau, et attend que le port soit effectivement libéré.
+        docker exec "$CONTAINER_NAME" bash -c "pkill -9 -f bin/simulator; pkill -9 -f Xvfb; exit 0" >/dev/null 2>&1
+        docker exec "$CONTAINER_NAME" bash -c '
+            for i in $(seq 1 20); do
+                (exec 3<>/dev/tcp/127.0.0.1/1234) 2>/dev/null || exit 0
+                exec 3<&- 3>&- 2>/dev/null
+                sleep 0.5
+            done
+            exit 1
+        ' || echo "Port 1234 toujours occupé après arrêt du simulateur précédent (inattendu)"
 
         docker exec -d "$CONTAINER_NAME" bash -c "Xvfb $display -screen 0 1280x1024x24 >/tmp/xvfb-$display_counter.log 2>&1"
 
@@ -139,7 +154,14 @@ for app in "${apps[@]}"; do
             exit 1
         '; then
             echo "Simulateur non joignable sur 127.0.0.1:1234 après 20s"
-            docker exec "$CONTAINER_NAME" bash -c "echo '--- xvfb-$display_counter.log ---'; cat /tmp/xvfb-$display_counter.log; echo '--- simulator-$display_counter.log ---'; cat /tmp/simulator-$display_counter.log" || true
+            docker exec "$CONTAINER_NAME" bash -c "
+                echo '--- ps aux (simulator/Xvfb) ---'
+                ps aux | grep -E 'simulator|Xvfb' | grep -v grep
+                echo '--- xvfb-$display_counter.log ---'
+                cat /tmp/xvfb-$display_counter.log
+                echo '--- simulator-$display_counter.log ---'
+                cat /tmp/simulator-$display_counter.log
+            " || true
             attempt=$((attempt + 1))
             continue
         fi

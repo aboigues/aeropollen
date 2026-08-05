@@ -216,25 +216,37 @@ dans un même run (la première réussit toujours) — `Simulateur non joignable
    qui vieillit. Les segfaults observés en local restent d'origine incertaine (possiblement un
    problème distinct, propre à cette machine ce jour-là) mais n'expliquent pas le pattern observé
    en CI.
+3. *Socket/verrou X11 périmé en réutilisant le même numéro de display (`:99`) entre tentatives* —
+   corrigé en donnant un numéro de display jamais réutilisé à chaque tentative
+   (`display_counter` incrémenté à chaque essai). **Amélioration réelle et conservée**, mais
+   **pas la cause du blocage** : le run CI suivant a montré le même échec avec des displays bien
+   distincts à chaque tentative (`:101`, `:102`, `:103`), donc ce n'était pas (ou pas seulement)
+   un problème de collision de socket X11.
 
-**Cause réelle identifiée** : le script relançait Xvfb + simulateur sur le **même numéro de
-display** (`:99`) à chaque tentative, après avoir tué les process précédents via `pkill`. Si
-Xvfb ne nettoie pas parfaitement son verrou/socket en mourant (`pkill` n'est pas un arrêt
-propre), le Xvfb suivant sur le même display peut échouer à démarrer silencieusement, tandis que
-le script croit qu'il est prêt car le fichier socket `/tmp/.X11-unix/X99` — en réalité périmé,
-laissé par l'instance précédente — existe déjà. Le simulateur lancé ensuite ne peut alors pas se
-connecter à un serveur X fonctionnel et n'ouvre jamais son port 1234. Cohérent avec le pattern
-exact observé (1re application : display jamais utilisé auparavant, fonctionne toujours ; 2e
-application : display réutilisé, échoue).
+**Cause réelle, confirmée par relecture du diff** : en corrigeant l'hypothèse 3, la ligne qui
+tuait explicitement les process `simulator`/`Xvfb` précédents (`pkill -f bin/simulator; pkill -f
+'Xvfb :99'`) a été supprimée par erreur, sans être remplacée. Or **`simulator` écoute toujours
+sur le même port TCP fixe, 1234, quel que soit le `DISPLAY` sur lequel il rend l'écran** — changer
+de numéro de display (hypothèse 3) n'a donc aucun effet sur ce problème précis. Sans ce `pkill`,
+le simulateur de la 1re application reste vivant et garde le port 1234 ; celui de la 2e
+application démarre normalement (log `Debug: SetLayout` identique à un démarrage réussi) mais ne
+peut jamais se lier au port déjà pris — sans lever la moindre erreur explicite, d'où la difficulté
+à diagnostiquer ce cas précis.
 
-**Correction appliquée** : chaque tentative (toutes applications et essais confondus, au sein
-d'un même run) utilise désormais un **numéro de display jamais réutilisé**
-(`display_counter` incrémenté à chaque essai) — élimine la possibilité de collision avec un
-socket/verrou périmé, sans dépendre d'un nettoyage parfait de l'instance précédente. Diagnostic
-supplémentaire ajouté : en cas d'échec, le contenu de `xvfb-N.log` et `simulator-N.log` est
-affiché, pour ne plus jamais avoir à re-deviner à l'aveugle si ça se reproduit.
+**Correction finale** : le `pkill` explicite (`simulator` et `Xvfb`, `-9` pour un arrêt immédiat)
+est restauré au début de **chaque tentative**, suivi d'une attente active que le port 1234 soit
+effectivement libéré avant de relancer quoi que ce soit — en plus (pas à la place) du numéro de
+display jamais réutilisé de l'hypothèse 3, qui reste une bonne pratique. Diagnostic supplémentaire
+ajouté en cas d'échec : `ps aux | grep -E 'simulator|Xvfb'` et le contenu de `xvfb-N.log` /
+`simulator-N.log`, pour ne plus jamais avoir à re-deviner à l'aveugle.
 
-**Statut** : correction basée sur une analyse du log CI réel (PR #8, 2026-08-05), pas encore
-reconfirmée par un nouveau run CI au moment de la rédaction — à vérifier au prochain push. Non
-revalidée en local (session WSL dans un état instable ce jour-là, indépendamment de ce bug —
-voir les segfaults `dmesg` mentionnés plus haut, cause distincte non résolue).
+**Statut** : confirmé résolu en local (43/43 tests, les deux applications en un seul essai, sans
+retry) après cette correction. Un avertissement bénin subsiste parfois (« Port 1234 toujours
+occupé après arrêt du simulateur précédent ») sans bloquer la suite — la vérification de
+libération du port peut prendre plus que les ~10 s prévus dans de rares cas ; le script continue
+quand même et ça fonctionne, non creusé davantage.
+
+**Leçon retenue** : lors d'une correction, ne pas supprimer un mécanisme existant (ici, le
+`pkill`) sans avoir vérifié explicitement qu'il n'est plus nécessaire — la nouvelle hypothèse
+(display réutilisé) semblait suffire à expliquer le symptôme, mais n'était en réalité qu'une
+amélioration annexe sans lien avec la cause réelle.
