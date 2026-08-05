@@ -199,43 +199,42 @@ en CI (`.github/workflows/tests.yml`).
 
 ---
 
-## 10. `scripts/run-tests-wsl.sh` : le binaire `simulator` segfaulte parfois sous WSL/Xvfb
+## 10. `scripts/run-tests-wsl.sh` : le simulateur ne répond plus pour la 2e application testée
 
-**Symptôme** : le script échoue de façon intermittente, sans lancer aucun test pour l'application
-concernée — soit avec `Unable to connect to simulator` (stderr), soit avec une sortie
-complètement vide après les `BUILD SUCCESSFUL`. Aucun conteneur résiduel trouvé (`docker ps -a`
-vide) — pas un problème de nettoyage entre deux runs.
+**Symptôme** : le script échoue de façon reproductible sur la **deuxième** application testée
+dans un même run (la première réussit toujours) — `Simulateur non joignable sur
+127.0.0.1:1234`, sans lancer aucun test pour cette application.
 
-**Hypothèse initiale (incomplète)** : délai fixe de 5 secondes insuffisant entre le lancement du
-simulateur et le premier `monkeydo`. Corrigée en remplaçant le `sleep` fixe par une attente
-active (socket X11 `/tmp/.X11-unix/X99`, puis connexion TCP à `127.0.0.1:1234` en boucle) — une
-amélioration réelle, mais qui n'était **pas la cause principale**.
+**Hypothèses écartées, dans l'ordre où elles ont été testées** :
+1. *Délai fixe de 5 s insuffisant avant le premier `monkeydo`* — remplacé par une attente active
+   (socket X11 puis port TCP en boucle), amélioration réelle mais qui n'a pas résolu le problème.
+2. *Dégradation de la session WSL locale après plusieurs heures d'usage intensif* — hypothèse
+   émise après avoir reproduit un échec quasi systématique en local (avec segfaults du binaire
+   `simulator` visibles dans `dmesg`, signal 11) en fin de session. **Réfutée** : le même échec
+   (2e application seulement) a été reproduit à l'identique sur un **runner GitHub Actions
+   fraîchement provisionné** (VM jamais utilisée avant ce job) — donc pas un problème de session
+   qui vieillit. Les segfaults observés en local restent d'origine incertaine (possiblement un
+   problème distinct, propre à cette machine ce jour-là) mais n'expliquent pas le pattern observé
+   en CI.
 
-**Cause réelle confirmée** : le binaire `simulator` (propriétaire Garmin) **segfaulte**
-(`signal 11`) de façon intermittente sous cet environnement WSL/Xvfb — confirmé directement via
-`dmesg` sur l'hôte :
-```
-simulator[PID]: segfault at 60 ip 0x... sp 0x... error 4 in simulator[...]
-simulator: simulator: potentially unexpected fatal signal 11.
-```
-Le process devient un zombie (`<defunct>`) après coup ; `monkeydo` ne peut alors plus se
-connecter, d'où les symptômes observés. Reproduit à la fois lors de la réutilisation d'un même
-simulateur entre deux `monkeydo` consécutifs (cas rencontré en CI, PR #8) et sur un simulateur
-frais avec attente généreuse (10 s) avant le premier `monkeydo` (cas reproduit localement,
-100 % du temps sur une session WSL très chargée après plusieurs heures d'usage intensif —
-possible dégradation de session liée à l'accumulation de processus Docker/X11 au fil d'une
-longue journée de travail, non confirmée comme cause exacte). Aucun lien de cause à effet établi
-avec le code de l'application elle-même (reproduit avec plusieurs `.prg` différents).
+**Cause réelle identifiée** : le script relançait Xvfb + simulateur sur le **même numéro de
+display** (`:99`) à chaque tentative, après avoir tué les process précédents via `pkill`. Si
+Xvfb ne nettoie pas parfaitement son verrou/socket en mourant (`pkill` n'est pas un arrêt
+propre), le Xvfb suivant sur le même display peut échouer à démarrer silencieusement, tandis que
+le script croit qu'il est prêt car le fichier socket `/tmp/.X11-unix/X99` — en réalité périmé,
+laissé par l'instance précédente — existe déjà. Le simulateur lancé ensuite ne peut alors pas se
+connecter à un serveur X fonctionnel et n'ouvre jamais son port 1234. Cohérent avec le pattern
+exact observé (1re application : display jamais utilisé auparavant, fonctionne toujours ; 2e
+application : display réutilisé, échoue).
 
-**Mitigation implémentée** (pas une vraie correction, le bug est dans un binaire propriétaire
-sans code source disponible) : `scripts/run-tests-wsl.sh` relance désormais Xvfb + simulateur à
-neuf pour **chaque** application (au lieu d'un simulateur partagé pour tout le run), avec
-jusqu'à 3 tentatives par application si le cycle précédent n'a produit aucun résultat
-PASSED/FAILED exploitable.
+**Correction appliquée** : chaque tentative (toutes applications et essais confondus, au sein
+d'un même run) utilise désormais un **numéro de display jamais réutilisé**
+(`display_counter` incrémenté à chaque essai) — élimine la possibilité de collision avec un
+socket/verrou périmé, sans dépendre d'un nettoyage parfait de l'instance précédente. Diagnostic
+supplémentaire ajouté : en cas d'échec, le contenu de `xvfb-N.log` et `simulator-N.log` est
+affiché, pour ne plus jamais avoir à re-deviner à l'aveugle si ça se reproduit.
 
-**Non résolu** : cette mitigation absorbe le cas « échec occasionnel isolé » (celui rencontré en
-CI), mais pas un environnement où le simulateur crashe de façon quasi systématique (celui
-reproduit localement en fin de session ce jour-là) — dans ce cas, seul un redémarrage de
-l'environnement WSL/Docker semble une piste plausible, non testée par manque de temps. À
-surveiller si le taux d'échec en CI (environnement toujours frais, a priori moins exposé à ce
-second cas) reste anormalement élevé malgré cette mitigation.
+**Statut** : correction basée sur une analyse du log CI réel (PR #8, 2026-08-05), pas encore
+reconfirmée par un nouveau run CI au moment de la rédaction — à vérifier au prochain push. Non
+revalidée en local (session WSL dans un état instable ce jour-là, indépendamment de ce bug —
+voir les segfaults `dmesg` mentionnés plus haut, cause distincte non résolue).

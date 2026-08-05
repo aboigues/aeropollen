@@ -71,6 +71,7 @@ docker run -d --name "$CONTAINER_NAME" \
 
 overall_status=0
 declare -a summary=()
+display_counter=99
 
 for app in "${apps[@]}"; do
     echo "=== $app ==="
@@ -87,31 +88,35 @@ for app in "${apps[@]}"; do
         continue
     fi
 
-    # Le binaire simulator (propriétaire Garmin) segfaulte parfois sous WSL/Xvfb, de façon
-    # intermittente et sans lien avec le timing (confirmé via dmesg : "segfault ... in
-    # simulator", signal 11) — voir TROUBLESHOOTING.md §10. Cause hors de notre contrôle (pas de
-    # code source), donc mitigation par nouvelles tentatives : simulateur relancé à neuf à chaque
-    # tentative, avec attente active (socket X11 puis port TCP) plutôt qu'un sleep fixe.
+    # Xvfb + simulateur relancés à neuf pour chaque tentative, sur un NUMÉRO DE DISPLAY JAMAIS
+    # RÉUTILISÉ (display_counter incrémenté à chaque essai, y compris entre applications) —
+    # cause réelle identifiée du problème initial : réutiliser le même display (:99) après avoir
+    # tué le Xvfb précédent laisse parfois un socket/verrou X11 périmé, qui fait échouer
+    # silencieusement le nouveau Xvfb tout en laissant croire au script qu'il est prêt (le
+    # fichier socket existant est celui, périmé, du précédent). Confirmé reproductible sur un
+    # runner GitHub Actions fraîchement provisionné (donc pas un problème de session locale
+    # vieillissante comme supposé initialement) — voir TROUBLESHOOTING.md §10.
     max_attempts=3
     attempt=1
     last_line=""
     got_result=false
 
     while [ "$attempt" -le "$max_attempts" ]; do
+        display_counter=$((display_counter + 1))
+        display=":$display_counter"
         if [ "$attempt" -gt 1 ]; then
-            echo "--- tentative $attempt/$max_attempts (simulateur probablement crashé, voir TROUBLESHOOTING.md §10) ---"
+            echo "--- tentative $attempt/$max_attempts (display $display) ---"
         fi
 
-        docker exec "$CONTAINER_NAME" bash -c "pkill -f bin/simulator; pkill -f 'Xvfb :99'; exit 0" >/dev/null 2>&1
-        docker exec -d "$CONTAINER_NAME" bash -c "Xvfb :99 -screen 0 1280x1024x24 >/tmp/xvfb.log 2>&1"
+        docker exec -d "$CONTAINER_NAME" bash -c "Xvfb $display -screen 0 1280x1024x24 >/tmp/xvfb-$display_counter.log 2>&1"
 
-        if ! docker exec "$CONTAINER_NAME" bash -c '
-            for i in $(seq 1 30); do
-                [ -S /tmp/.X11-unix/X99 ] && exit 0
+        if ! docker exec "$CONTAINER_NAME" bash -c "
+            for i in \$(seq 1 30); do
+                [ -S /tmp/.X11-unix/X$display_counter ] && exit 0
                 sleep 0.5
             done
             exit 1
-        '; then
+        "; then
             echo "Xvfb non prêt après 15s"
             attempt=$((attempt + 1))
             continue
@@ -119,8 +124,8 @@ for app in "${apps[@]}"; do
 
         docker exec -d "$CONTAINER_NAME" bash -c "
             export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-            export DISPLAY=:99
-            simulator >/tmp/simulator.log 2>&1
+            export DISPLAY=$display
+            simulator >/tmp/simulator-$display_counter.log 2>&1
         "
 
         if ! docker exec "$CONTAINER_NAME" bash -c '
@@ -134,6 +139,7 @@ for app in "${apps[@]}"; do
             exit 1
         '; then
             echo "Simulateur non joignable sur 127.0.0.1:1234 après 20s"
+            docker exec "$CONTAINER_NAME" bash -c "echo '--- xvfb-$display_counter.log ---'; cat /tmp/xvfb-$display_counter.log; echo '--- simulator-$display_counter.log ---'; cat /tmp/simulator-$display_counter.log" || true
             attempt=$((attempt + 1))
             continue
         fi
@@ -144,7 +150,7 @@ for app in "${apps[@]}"; do
         # (PASSED/FAILED), pas via son code de sortie.
         docker exec "$CONTAINER_NAME" bash -c "
             export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-            export DISPLAY=:99
+            export DISPLAY=$display
             monkeydo /tmp/build/$app/app.prg $DEVICE -t
         " | tee "$log_file"
 
@@ -154,7 +160,7 @@ for app in "${apps[@]}"; do
             break
         fi
 
-        # Sortie vide ou inattendue : le simulateur a très probablement crashé pendant ce cycle.
+        # Sortie vide ou inattendue : le simulateur a probablement crashé pendant ce cycle.
         attempt=$((attempt + 1))
     done
 
