@@ -33,7 +33,8 @@ détail par appareil.
   courante.
 - Rafraîchissement en arrière-plan (`Background.registerForTemporalEvent`), sans appel réseau
   dans le cycle de rendu (`compute()`/`onUpdate()`), conformément aux contraintes de la
-  plateforme Connect IQ (voir `specs/001-pollen-air-datafield/research.md`).
+  plateforme Connect IQ (voir `specs/001-pollen-air-datafield/research.md`) — premier relevé
+  déclenché quasi immédiatement à l'installation, puis toutes les 15 minutes.
 - Chaque champ est une application Connect IQ **installable et testable indépendamment** de
   l'autre — un `manifest.xml` Connect IQ ne peut déclarer qu'un seul `<iq:application>`.
 

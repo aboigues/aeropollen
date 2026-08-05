@@ -1,4 +1,5 @@
 import Toybox.Test;
+import Toybox.Background;
 import Toybox.Lang;
 import Toybox.Time;
 
@@ -38,5 +39,19 @@ module AeroPollenCore {
     (:test)
     function testRefreshIntervalIsAtLeastFifteenMinutes(logger as Test.Logger) as Boolean {
         return REFRESH_INTERVAL_SECONDS >= 15 * 60;
+    }
+
+    // research.md §14 : quel que soit le déclencheur du réveil (premier lancement via Moment
+    // quasi immédiat, ou réveil normal via Duration), onTemporalEvent() doit toujours
+    // reprogrammer le prochain réveil au rythme normal de 15 minutes.
+    (:test)
+    function testOnTemporalEventReschedulesNormalInterval(logger as Test.Logger) as Boolean {
+        var delegate = new EnvironmentalBackgroundDelegate();
+
+        delegate.onTemporalEvent();
+
+        var registered = Background.getTemporalEventRegisteredTime();
+        return registered instanceof Time.Duration
+            && (registered as Time.Duration).value() == REFRESH_INTERVAL_SECONDS;
     }
 }

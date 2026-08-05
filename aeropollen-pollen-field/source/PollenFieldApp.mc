@@ -13,9 +13,12 @@ class PollenFieldApp extends Application.AppBase {
         AppBase.initialize();
 
         if (Background.getTemporalEventRegisteredTime() == null) {
-            Background.registerForTemporalEvent(
-                new Time.Duration(AeroPollenCore.REFRESH_INTERVAL_SECONDS)
-            );
+            // Premier lancement : Background.registerForTemporalEvent() avec un Moment déjà
+            // passé déclenche l'événement quasi immédiatement (doc Toybox.Background), plutôt
+            // que d'attendre REFRESH_INTERVAL_SECONDS avant le tout premier relevé.
+            // EnvironmentalBackgroundDelegate reprogramme ensuite le rythme normal de 15 minutes
+            // dès ce premier réveil.
+            Background.registerForTemporalEvent(Time.now());
         }
     }
 

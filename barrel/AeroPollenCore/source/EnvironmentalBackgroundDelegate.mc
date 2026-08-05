@@ -2,6 +2,7 @@ import Toybox.Background;
 import Toybox.Lang;
 import Toybox.Position;
 import Toybox.System;
+import Toybox.Time;
 
 // Service en arrière-plan partagé par les deux applications (research.md §3, §9). Interroge
 // Open-Meteo à intervalle régulier et met à jour le cache local de l'application courante.
@@ -28,6 +29,13 @@ module AeroPollenCore {
         // Appelé par le firmware à l'échéance enregistrée via
         // Background.registerForTemporalEvent() (FR-003).
         public function onTemporalEvent() as Void {
+            // Reprogramme systématiquement le prochain réveil au rythme normal, y compris juste
+            // après le tout premier déclenchement quasi immédiat enregistré par AppBase avec un
+            // Moment (cf. AirQualityFieldApp/PollenFieldApp) : garantit un intervalle stable de
+            // 15 minutes une fois le premier relevé obtenu, sans dépendre du type
+            // d'enregistrement (Moment ou Duration) à l'origine de ce réveil précis.
+            Background.registerForTemporalEvent(new Time.Duration(REFRESH_INTERVAL_SECONDS));
+
             var location = currentLocation();
 
             if (location == null) {

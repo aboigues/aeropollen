@@ -193,6 +193,27 @@ tests passent (`PASSED`) — il faut donc parser la sortie standard (dernière l
 
 **Conclusion** : le §5 (et la recommandation de `[[aeropollen-next-steps]]` d'attendre Windows)
 sont **obsolètes**. L'exécution réelle des tests `Toybox.Test` fonctionne désormais sous WSL, à
-condition d'utiliser Xvfb plutôt que le display WSLg réel. Non encore automatisé dans un script
-réutilisable du dépôt à cette date — prochaine étape naturelle si cette procédure doit être
-répétée souvent.
+condition d'utiliser Xvfb plutôt que le display WSLg réel. Automatisé depuis dans
+`scripts/run-tests-wsl.sh` (voir §10 pour un flake occasionnel de ce script) et repris tel quel
+en CI (`.github/workflows/tests.yml`).
+
+---
+
+## 10. `scripts/run-tests-wsl.sh` : flake occasionnel « Unable to connect to simulator »
+
+**Symptôme** : le script échoue parfois (sur environ 1 run sur 5-10, non systématique) avec
+`Unable to connect to simulator` juste après les deux `BUILD SUCCESSFUL`, sans lancer aucun
+test. Aucun conteneur résiduel trouvé (`docker ps -a` vide) — pas un problème de nettoyage entre
+deux runs.
+
+**Cause probable** : le délai fixe de 5 secondes entre le lancement du simulateur et le premier
+`monkeydo` (dans le script) est parfois insuffisant selon la charge de la machine hôte au moment
+du run (ex. d'autres processus Docker/Chrome en cours) — le simulateur n'a pas fini de démarrer
+dans Xvfb.
+
+**Contournement actuel** : relancer le script suffit à chaque fois observé jusqu'ici.
+
+**Amélioration possible, non implémentée** : remplacer le `sleep 5` fixe par une boucle de
+vérification active (ex. tenter une connexion TCP à `127.0.0.1:1234` en boucle avec un timeout,
+plutôt qu'une attente fixe) — à faire si ce flake devient gênant en pratique (notamment en CI, où
+la charge de la machine est encore moins prévisible).
