@@ -1,0 +1,89 @@
+name: Sécurité
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Principe de moindre privilège (constitution, Principe II) : le jeton par défaut
+# n'a besoin que de lire le contenu du dépôt pour ces vérifications.
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Détection de secrets committés
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (historique complet requis par gitleaks)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # L'action officielle gitleaks/gitleaks-action exige une licence payante sur les dépôts
+      # privés (gratuite uniquement sur dépôt public) — ce dépôt est privé pour l'instant, donc
+      # l'image Docker open source (MIT) est utilisée directement, sans cette restriction.
+      - name: gitleaks (image Docker officielle, sans passer par l'Action payante)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source=/repo --no-banner --redact
+
+  no-signing-key-tracked:
+    name: Clé de signature développeur absente du dépôt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vérifier qu'aucune clé (.der/.pem) n'est suivie par Git
+        run: |
+          set -euo pipefail
+          matches=$(git ls-files -- '*.der' '*.pem' 'developer_key*' || true)
+          if [ -n "$matches" ]; then
+            echo "::error::Fichier(s) de clé trouvé(s) dans le dépôt (voir SECURITY.md) :"
+            echo "$matches"
+            exit 1
+          fi
+          echo "OK : aucune clé de signature suivie par Git."
+
+  shellcheck-scripts:
+    name: Analyse statique des scripts Shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # .specify/scripts/bash/ est de l'outillage vendored (template speckit), pas du code
+      # applicatif AeroPollen : la porte bloquante ne réagit qu'aux erreurs réelles (injection,
+      # syntaxe). Les avertissements de style pré-existants sont affichés à titre informatif
+      # sans faire échouer le job (cf. SECURITY_AUDIT.md, section Scripts Shell).
+      - name: shellcheck (informatif, avertissements de style inclus)
+        continue-on-error: true
+        run: shellcheck -S warning .specify/scripts/bash/*.sh
+      - name: shellcheck (bloquant, erreurs uniquement)
+        run: shellcheck -S error .specify/scripts/bash/*.sh
+
+  validate-connectiq-manifests:
+    name: Validation XML des manifestes Connect IQ
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer xmllint
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+      - name: Valider le bon format XML de tous les manifestes/ressources
+        run: |
+          set -euo pipefail
+          xml_status=0
+          while IFS= read -r -d '' file; do
+            xmllint --noout "$file" || xml_status=1
+          done < <(find . -path ./.git -prune -o -name '*.xml' -print0)
+          exit $xml_status
+      - name: Vérifier que les 3 permissions attendues sont bien déclarées (moindre privilège)
+        run: |
+          set -euo pipefail
+          for f in aeropollen-air-quality-field/manifest.xml aeropollen-pollen-field/manifest.xml barrel/AeroPollenCore/manifest.xml; do
+            for perm in Communications Background Positioning; do
+              grep -q "uses-permission id=\"$perm\"" "$f" || { echo "::error file=$f::Permission $perm manquante"; exit 1; }
+            done
+            # Alerte si une permission NON attendue apparaît (dérive de périmètre à valider manuellement)
+            extra=$(grep -o 'uses-permission id="[^"]*"' "$f" | sed 's/.*id="//;s/"//' | grep -vE '^(Communications|Background|Positioning)$' || true)
+            if [ -n "$extra" ]; then
+              echo "::warning file=$f::Permission(s) non attendue(s), à valider manuellement : $extra"
+            fi
+          done

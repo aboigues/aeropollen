@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Le projet n'a pas de gestionnaire de paquets applicatif (Monkey C/Connect IQ n'en a pas) ;
+  # seules les actions GitHub utilisées par la CI constituent une dépendance à surveiller.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
