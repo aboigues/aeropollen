@@ -1,5 +1,5 @@
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
-    <iq:barrel id="A1498BABDC7541139A84ED5DA1E73339" module="AeroPollenCore" version="1.1.0" minApiLevel="3.3.0">
+    <iq:barrel id="A1498BABDC7541139A84ED5DA1E73339" module="AeroPollenCore" version="1.1.1" minApiLevel="3.3.0">
 
         <!-- Doit couvrir au moins l'union des appareils déclarés par les applications qui
              dépendent de ce Barrel (voir aeropollen-air-quality-field et
