@@ -18,7 +18,10 @@ application).
 - **Rôle** : afficher `Relevé Environnemental.indice_qualite_air` (European AQI) pour la
   position courante (User Story 1, FR-001).
 - **États d'affichage** :
-  - `A_JOUR` → valeur numérique de l'indice.
+  - `A_JOUR` → valeur numérique de l'indice, suivie d'une lettre de catégorie (`A`-`F`) mappée sur
+    les 6 paliers officiels EAQI (Agence Européenne de l'Environnement : Bon/Correct/Moyen/
+    Mauvais/Très mauvais/Extrêmement mauvais), ex. `"34 B"` — retour terrain 2026-08-07 : le
+    chiffre seul nécessite une interprétation, la lettre permet une lecture instantanée à vélo.
   - `INDISPONIBLE` → libellé explicite d'indisponibilité (FR-005), jamais une valeur numérique
     ni un champ vide sans explication.
 - **Contrainte de lecture** : la valeur affichée est lue depuis le cache local
@@ -30,7 +33,10 @@ application).
 - **Rôle** : afficher `Relevé Environnemental.score_pollen_global` en vue principale, avec accès
   au détail par `Type de Pollen` (FR-002/FR-002a, User Story 2).
 - **États d'affichage** :
-  - `A_JOUR` avec au moins un type renseigné → score global affiché.
+  - `A_JOUR` avec au moins un type renseigné → score global affiché, suivi d'une lettre de
+    catégorie (`A`-`F`) sur des seuils génériques **approximatifs** (aucune échelle européenne
+    officielle unique n'existe par type de pollen ; seuils volontairement bas pour ne pas
+    sous-estimer les espèces très allergisantes à faible seuil comme l'ambroisie), ex. `"7 B"`.
   - `A_JOUR` mais aucun type renseigné pour la zone/saison → libellé explicite d'absence de
     donnée pollen (Edge Case spec.md, Acceptance Scenario 2 de User Story 2), distinct de l'état
     `INDISPONIBLE` global.

@@ -69,19 +69,9 @@ docker run -d --name "$CONTAINER_NAME" \
     -v "$REPO_ROOT:/workspace" \
     "$IMAGE_TAG" sleep infinity >/dev/null
 
-# Framebuffer virtuel + simulateur, démarrés une seule fois pour toutes les applications testées
-# (le simulateur reste actif entre plusieurs monkeydo successifs, usage normal de l'outil).
-docker exec -d "$CONTAINER_NAME" bash -c "Xvfb :99 -screen 0 1280x1024x24 >/tmp/xvfb.log 2>&1"
-sleep 1
-docker exec -d "$CONTAINER_NAME" bash -c "
-    export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-    export DISPLAY=:99
-    simulator >/tmp/simulator.log 2>&1
-"
-sleep 5
-
 overall_status=0
 declare -a summary=()
+display_counter=99
 
 for app in "${apps[@]}"; do
     echo "=== $app ==="
@@ -98,21 +88,133 @@ for app in "${apps[@]}"; do
         continue
     fi
 
-    log_file="/tmp/aeropollen-test-$app.log"
-    # monkeydo retourne toujours le code de sortie 1, même quand tous les tests passent — le
-    # résultat réel s'obtient en lisant la dernière ligne de la sortie standard
-    # (PASSED/FAILED), pas via son code de sortie.
-    docker exec "$CONTAINER_NAME" bash -c "
-        export PATH=\"$sdk_path_in_container/bin:\$PATH\"
-        export DISPLAY=:99
-        monkeydo /tmp/build/$app/app.prg $DEVICE -t
-    " | tee "$log_file"
+    # Xvfb + simulateur relancés à neuf pour chaque tentative, sur un numéro de display jamais
+    # réutilisé (display_counter incrémenté à chaque essai, y compris entre applications) — évite
+    # toute collision avec un socket/verrou X11 périmé.
+    #
+    # ATTENTION (régression déjà commise une fois, cf. TROUBLESHOOTING.md §10) : le binaire
+    # `simulator` écoute TOUJOURS sur le même port TCP fixe (1234), quel que soit le DISPLAY sur
+    # lequel il rend l'écran. Changer de display ne suffit donc PAS : le simulateur de la
+    # tentative précédente (ou de l'application précédente) doit être explicitement tué avant
+    # d'en lancer un nouveau, sinon le suivant ne peut jamais se lier au port 1234 — il démarre
+    # et log normalement ("Debug: SetLayout") mais son port n'est jamais joignable, sans aucune
+    # erreur explicite.
+    max_attempts=3
+    attempt=1
+    last_line=""
+    got_result=false
 
-    last_line=$(tail -1 "$log_file")
-    if [[ "$last_line" == PASSED* ]]; then
+    while [ "$attempt" -le "$max_attempts" ]; do
+        display_counter=$((display_counter + 1))
+        display=":$display_counter"
+        if [ "$attempt" -gt 1 ]; then
+            echo "--- tentative $attempt/$max_attempts (display $display) ---"
+        fi
+
+        # Tue tout simulateur/Xvfb précédent (port 1234 fixe, cf. avertissement ci-dessus) avant
+        # d'en relancer un nouveau, et attend que le port soit effectivement libéré.
+        #
+        # Deux pièges cumulés ici (cf. TROUBLESHOOTING.md §10) :
+        # 1. `pkill -f bin/simulator` ne correspond JAMAIS au process réel : invoqué via
+        #    résolution de PATH, son argv[0]/cmdline est simplement "simulator", sans aucun
+        #    chemin — confirmé via /proc/<pid>/cmdline. `pkill -f` ne l'a donc jamais tué, quel
+        #    que soit le nombre de fois où cette ligne s'exécutait. `-x` (correspondance exacte
+        #    sur le nom du process, pas sur la ligne de commande) fonctionne.
+        # 2. Même une fois correctement tué, le simulateur laisse un fichier verrou mono-instance
+        #    (/root/Sim-root) qui n'est nettoyé que lors d'un arrêt propre — jamais après un
+        #    signal. Sans le supprimer explicitement, toute nouvelle instance de `simulator`
+        #    refuse de démarrer, silencieusement (aucune ligne de log, aucune erreur).
+        docker exec "$CONTAINER_NAME" bash -c "pkill -9 -x simulator; pkill -9 -x Xvfb; rm -f /root/Sim-root; exit 0" >/dev/null 2>&1
+        docker exec "$CONTAINER_NAME" bash -c '
+            for i in $(seq 1 20); do
+                (exec 3<>/dev/tcp/127.0.0.1/1234) 2>/dev/null || exit 0
+                exec 3<&- 3>&- 2>/dev/null
+                sleep 0.5
+            done
+            exit 1
+        ' || echo "Port 1234 toujours occupé après arrêt du simulateur précédent (inattendu)"
+
+        docker exec -d "$CONTAINER_NAME" bash -c "Xvfb $display -screen 0 1280x1024x24 >/tmp/xvfb-$display_counter.log 2>&1"
+
+        if ! docker exec "$CONTAINER_NAME" bash -c "
+            for i in \$(seq 1 30); do
+                [ -S /tmp/.X11-unix/X$display_counter ] && exit 0
+                sleep 0.5
+            done
+            exit 1
+        "; then
+            echo "Xvfb non prêt après 15s"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        docker exec -d "$CONTAINER_NAME" bash -c "
+            export PATH=\"$sdk_path_in_container/bin:\$PATH\"
+            export DISPLAY=$display
+            simulator >/tmp/simulator-$display_counter.log 2>&1
+        "
+
+        if ! docker exec "$CONTAINER_NAME" bash -c '
+            for i in $(seq 1 40); do
+                if (exec 3<>/dev/tcp/127.0.0.1/1234) 2>/dev/null; then
+                    exec 3<&- 3>&-
+                    exit 0
+                fi
+                sleep 0.5
+            done
+            exit 1
+        '; then
+            echo "Simulateur non joignable sur 127.0.0.1:1234 après 20s"
+            docker exec "$CONTAINER_NAME" bash -c "
+                echo '--- ps aux (simulator/Xvfb) ---'
+                ps aux | grep -E 'simulator|Xvfb' | grep -v grep
+                echo '--- /root/Sim-root (verrou mono-instance) ---'
+                ls -la /root/Sim-root 2>&1
+                echo '--- xvfb-$display_counter.log ---'
+                cat /tmp/xvfb-$display_counter.log
+                echo '--- simulator-$display_counter.log ---'
+                cat /tmp/simulator-$display_counter.log
+            " || true
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        log_file="/tmp/aeropollen-test-$app.log"
+        # monkeydo retourne toujours le code de sortie 1, même quand tous les tests passent — le
+        # résultat réel s'obtient en lisant la dernière ligne de la sortie standard
+        # (PASSED/FAILED), pas via son code de sortie.
+        docker exec "$CONTAINER_NAME" bash -c "
+            export PATH=\"$sdk_path_in_container/bin:\$PATH\"
+            export DISPLAY=$display
+            monkeydo /tmp/build/$app/app.prg $DEVICE -t
+        " | tee "$log_file"
+
+        last_line=$(tail -1 "$log_file")
+        if [[ "$last_line" == PASSED* || "$last_line" == FAILED* ]]; then
+            got_result=true
+            break
+        fi
+
+        # Sortie vide ou inattendue de monkeydo lui-même (distinct du cas "simulateur non
+        # joignable" ci-dessus, déjà diagnostiqué) : le simulateur était joignable au moment du
+        # check, mais quelque chose s'est mal passé pendant l'exécution des tests.
+        echo "monkeydo n'a produit aucun résultat PASSED/FAILED exploitable"
+        echo "--- contenu de $log_file ($(wc -l < "$log_file") lignes) ---"
+        cat "$log_file"
+        docker exec "$CONTAINER_NAME" bash -c '
+            echo "--- ps aux (simulator/Xvfb) au moment de cet echec ---"
+            ps aux | grep -E "simulator|Xvfb" | grep -v grep
+        ' || true
+        attempt=$((attempt + 1))
+    done
+
+    if [ "$got_result" = true ] && [[ "$last_line" == PASSED* ]]; then
         summary+=("$app : $last_line")
+    elif [ "$got_result" = true ]; then
+        summary+=("$app : $last_line")
+        overall_status=1
     else
-        summary+=("$app : $last_line")
+        summary+=("$app : ÉCHEC après $max_attempts tentatives (simulateur instable, voir TROUBLESHOOTING.md §10)")
         overall_status=1
     fi
     echo

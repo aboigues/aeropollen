@@ -12,10 +12,16 @@ class PollenFieldApp extends Application.AppBase {
     function initialize() {
         AppBase.initialize();
 
-        if (Background.getTemporalEventRegisteredTime() == null) {
-            Background.registerForTemporalEvent(
-                new Time.Duration(AeroPollenCore.REFRESH_INTERVAL_SECONDS)
-            );
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("app_init_start");
+        try {
+            if (Background.getTemporalEventRegisteredTime() == null) {
+                Background.registerForTemporalEvent(Time.now());
+            }
+            debug.checkpoint("app_init_ok");
+        } catch (ex) {
+            debug.recordException("app_init", ex);
         }
     }
 
@@ -24,7 +30,12 @@ class PollenFieldApp extends Application.AppBase {
     // annotée (:background) (AeroPollenCore.EnvironmentalBackgroundDelegate).
     (:typecheck(disableBackgroundCheck))
     function getInitialView() as [Views] or [Views, InputDelegates] {
-        return [ new $.PollenFieldView() ];
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("get_initial_view_start");
+        var view = new $.PollenFieldView();
+        debug.checkpoint("get_initial_view_ok");
+        return [ view ];
     }
 
     function getServiceDelegate() as [System.ServiceDelegate] {

@@ -15,46 +15,95 @@ class AirQualityFieldView extends WatchUi.DataField {
     }
 
     function onLayout(dc as Dc) as Void {
-        var obscurityFlags = DataField.getObscurityFlags();
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("on_layout_start");
+        try {
+            var obscurityFlags = DataField.getObscurityFlags();
 
-        if (obscurityFlags == (OBSCURE_TOP | OBSCURE_LEFT)) {
-            View.setLayout(Rez.Layouts.TopLeftLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_TOP | OBSCURE_RIGHT)) {
-            View.setLayout(Rez.Layouts.TopRightLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_LEFT)) {
-            View.setLayout(Rez.Layouts.BottomLeftLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_RIGHT)) {
-            View.setLayout(Rez.Layouts.BottomRightLayout(dc));
-        } else {
-            View.setLayout(Rez.Layouts.MainLayout(dc));
-            var labelView = View.findDrawableById("label") as Text;
-            labelView.locY = labelView.locY - 16;
-            var valueView = View.findDrawableById("value") as Text;
-            valueView.locY = valueView.locY + 7;
+            if (obscurityFlags == (OBSCURE_TOP | OBSCURE_LEFT)) {
+                View.setLayout(Rez.Layouts.TopLeftLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_TOP | OBSCURE_RIGHT)) {
+                View.setLayout(Rez.Layouts.TopRightLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_LEFT)) {
+                View.setLayout(Rez.Layouts.BottomLeftLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_RIGHT)) {
+                View.setLayout(Rez.Layouts.BottomRightLayout(dc));
+            } else {
+                View.setLayout(Rez.Layouts.MainLayout(dc));
+                var labelView = View.findDrawableById("label") as Text;
+                labelView.locY = labelView.locY - 16;
+                var valueView = View.findDrawableById("value") as Text;
+                valueView.locY = valueView.locY + 7;
+            }
+
+            (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
+            debug.checkpoint("on_layout_ok");
+        } catch (ex) {
+            debug.recordException("on_layout", ex);
+            try {
+                View.setLayout(Rez.Layouts.MainLayout(dc));
+            } catch (ex2) {
+                debug.recordException("on_layout_fallback", ex2);
+            }
         }
-
-        (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
     }
 
     // Lecture seule du cache alimenté par EnvironmentalBackgroundDelegate (research.md §3, §9) ;
     // ne déclenche jamais de requête réseau (FR-007, SC-004).
     function compute(info as Activity.Info) as Void {
-        _reading = new AeroPollenCore.EnvironmentalReadingStore().load();
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        try {
+            _reading = new AeroPollenCore.EnvironmentalReadingStore().load();
+            debug.checkpoint("compute_ok");
+        } catch (ex) {
+            debug.recordException("compute", ex);
+            _reading = AeroPollenCore.EnvironmentalReading.unavailable();
+        }
     }
 
     function onUpdate(dc as Dc) as Void {
-        (View.findDrawableById("Background") as Background).setColor(getBackgroundColor() as ColorValue);
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc. Tout onUpdate() est
+        // protégé pour ne jamais planter jusqu'à l'OS (sinon Connect IQ affiche le logo de l'app
+        // à la place du champ, sans aucune trace exploitable) ; en cas d'exception, on affiche le
+        // point de blocage + le message d'erreur directement sur le champ.
+        var debug = new AeroPollenCore.DebugStatus();
+        try {
+            (View.findDrawableById("Background") as Background).setColor(getBackgroundColor() as ColorValue);
 
-        var value = View.findDrawableById("value") as Text;
-        if (getBackgroundColor() == Graphics.COLOR_BLACK) {
-            value.setColor(Graphics.COLOR_WHITE);
-        } else {
-            value.setColor(Graphics.COLOR_BLACK);
+            var value = View.findDrawableById("value") as Text;
+            if (getBackgroundColor() == Graphics.COLOR_BLACK) {
+                value.setColor(Graphics.COLOR_WHITE);
+            } else {
+                value.setColor(Graphics.COLOR_BLACK);
+            }
+
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : affiche le dernier code + un extrait du
+            // motif d'erreur HTTP à la place du libellé/valeur quand indisponible, pour voir
+            // pourquoi sans dépendre d'un outil externe (aucun log accessible sur l'appareil).
+            if (_reading.isUnavailable()) {
+                (View.findDrawableById("label") as Text).setText(
+                    debug.readCode().toString() + " " + debug.readPhoneConnected()
+                );
+                value.setText(debug.readResponseDetail());
+            } else {
+                (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
+                value.setText(displayValueFor(_reading));
+            }
+            debug.checkpoint("on_update_ok");
+
+            View.onUpdate(dc);
+        } catch (ex) {
+            debug.recordException("on_update", ex);
+            try {
+                (View.findDrawableById("label") as Text).setText(debug.readCheckpoint());
+                (View.findDrawableById("value") as Text).setText(debug.readExceptionMessage());
+                View.onUpdate(dc);
+            } catch (ex2) {
+                debug.recordException("on_update_fallback", ex2);
+            }
         }
-
-        value.setText(displayValueFor(_reading));
-
-        View.onUpdate(dc);
     }
 
     // Extrait pour être directement testable (AirQualityFieldIntegrationTest.mc) sans dépendre
@@ -62,9 +111,27 @@ class AirQualityFieldView extends WatchUi.DataField {
     function displayValueFor(reading as AeroPollenCore.EnvironmentalReading) as String {
         var aqi = reading.airQualityIndex;
         if (reading.isUpToDate() && aqi != null) {
-            return (aqi as Number).toString();
+            return (aqi as Number).toString() + " " + gradeLetterFor(aqi as Number);
         }
         // FR-005 : état "indisponible" explicite, jamais d'ancienne valeur ni d'écran vide.
         return WatchUi.loadResource(Rez.Strings.UnavailableValue) as String;
+    }
+
+    // Paliers officiels de l'Indice Européen de Qualité de l'Air (EAQI, Agence Européenne de
+    // l'Environnement) : Bon/Correct/Moyen/Mauvais/Très mauvais/Extrêmement mauvais, mappés sur
+    // A-F pour une lecture instantanée à vélo (FR-008).
+    function gradeLetterFor(aqi as Number) as String {
+        if (aqi < 20) {
+            return "A";
+        } else if (aqi < 40) {
+            return "B";
+        } else if (aqi < 60) {
+            return "C";
+        } else if (aqi < 80) {
+            return "D";
+        } else if (aqi < 100) {
+            return "E";
+        }
+        return "F";
     }
 }
