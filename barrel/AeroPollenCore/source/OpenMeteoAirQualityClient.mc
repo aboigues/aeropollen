@@ -209,11 +209,9 @@ module AeroPollenCore {
             try {
                 if (data == null) {
                     return "(null)";
-                }
-                if (data instanceof String) {
+                } else if (data instanceof String) {
                     return "str:" + (data as String);
-                }
-                if (data instanceof Dictionary) {
+                } else {
                     var dict = data as Dictionary;
                     var keys = dict.keys();
                     var text = "dict:";
@@ -224,7 +222,6 @@ module AeroPollenCore {
                     }
                     return text;
                 }
-                return "(null)";
             } catch (ex) {
                 return "(describeResponseData a échoué)";
             }
