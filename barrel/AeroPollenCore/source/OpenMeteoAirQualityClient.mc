@@ -71,11 +71,16 @@ module AeroPollenCore {
             debug.record(responseCode);
             debug.recordResponseDetail(describeResponseData(data));
 
-            if (responseCode == Communications.BLE_CONNECTION_UNAVAILABLE) {
+            if (responseCode == Communications.BLE_CONNECTION_UNAVAILABLE
+                || responseCode == Communications.BLE_HOST_TIMEOUT) {
                 // Retour terrain 2026-08-07 (TROUBLESHOOTING.md §12) : coupure BLE transitoire
-                // confirmée (phoneConnected faux à l'instant précis, malgré une connexion par
-                // ailleurs stable) — reprogramme le prochain réveil plus tôt que le cycle normal
-                // de 15 min (REFRESH_INTERVAL_SECONDS), au lieu d'attendre son terme. Cet appel
+                // confirmée pour -104 (phoneConnected faux à l'instant précis, malgré une
+                // connexion par ailleurs stable). -2 (BLE_HOST_TIMEOUT, "timed out waiting for a
+                // response from the host") observé ensuite avec phoneConnected VRAI cette fois —
+                // le lien BLE était actif mais le téléphone n'a pas répondu à temps (app en
+                // arrière-plan lente à se réveiller, congestion ponctuelle). Les deux traités de
+                // la même façon : reprogramme le prochain réveil plus tôt que le cycle normal de
+                // 15 min (REFRESH_INTERVAL_SECONDS), au lieu d'attendre son terme. Cet appel
                 // remplace l'inscription déjà posée en tête d'EnvironmentalBackgroundDelegate.
                 // onTemporalEvent() pour le cycle normal : la dernière inscription avant
                 // Background.exit() fait foi.

@@ -554,12 +554,23 @@ lettre de catégorie A-F à côté de la valeur numérique brute :
   moyenne.
 Voir `contracts/garmin-datafields.md` (mis à jour) pour le détail des paliers.
 
-**État à ce stade (2026-08-07, non commité)** : la chaîne complète fonctionne sur le terrain.
-Reste ouvert : observer sur la durée si le retry à 5 min réduit effectivement la fréquence/durée
-des `N/D` liés au `-104`, et si le retrait progressif du code de diagnostic (`DebugStatus` et ses
-points d'appel) peut être planifié maintenant que le symptôme "logo" et le `-104` sont tous deux
-expliqués.
+**Suite terrain (v1.1.0 déjà publiée)** : après un nouveau lancement de l'app, code obtenu
+`-2 P1 (null)` sur Air (Pollen restait correct : `7 B`). `-2` =
+`Communications.BLE_HOST_TIMEOUT` ("timed out waiting for a response from the host") — distinct de
+`-104`. Point notable : `phoneConnected` était cette fois **vrai** (`P1`), contrairement au
+`-104/P0` précédent — le lien BLE était actif, mais le téléphone (Garmin Connect Mobile) n'a pas
+répondu dans le délai imparti (app en arrière-plan lente à se réveiller, congestion ponctuelle du
+canal BLE). Traité de la même façon que `-104` : `onResponse()` reprogramme désormais le retry à
+5 min aussi sur `BLE_HOST_TIMEOUT`, pas seulement `BLE_CONNECTION_UNAVAILABLE`.
 
-**Rappel** : les deux PR (#8 et son équivalent pour le fix mémoire) restent **volontairement
-ouvertes**, non mergées — investigation en cours, rien n'est prêt à merger tant que le symptôme
-"logo" n'est pas résolu.
+**État à ce stade** : la chaîne complète fonctionne sur le terrain (v1.1.0 publiée : correctif N/D,
+retry BLE, affichage A-F). Le retry couvre maintenant `-104` et `-2`. Reste ouvert : observer sur
+la durée si d'autres codes BLE transitoires apparaissent (`-1` BLE_ERROR, `-3`
+BLE_SERVER_TIMEOUT, `-4` BLE_NO_DATA, `-5` BLE_REQUEST_CANCELLED — tous documentés dans le SDK
+mais non encore observés sur le terrain), et si le retrait progressif du code de diagnostic
+(`DebugStatus` et ses points d'appel) peut être planifié maintenant que "logo", `-104` et `-2` sont
+tous expliqués.
+
+**Rappel** : les PR de préparation de release (#8, #9, #10) ont toutes été mergées ; ce correctif
+(extension du retry à `-2`) est un suivi post-v1.1.0, à committer/PR séparément avant le prochain
+cycle de release.
