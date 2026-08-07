@@ -29,7 +29,7 @@
         </iq:languages>
 
         <iq:barrels>
-            <iq:depends name="AeroPollenCore" version="1.1.0"/>
+            <iq:depends name="AeroPollenCore" version="1.1.1"/>
         </iq:barrels>
 
     </iq:application>
