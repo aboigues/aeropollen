@@ -19,6 +19,14 @@ module AeroPollenCore {
     (:background)
     const REFRESH_INTERVAL_SECONDS = 15 * 60;
 
+    // Retour terrain 2026-08-07 (TROUBLESHOOTING.md §12) : Communications.BLE_CONNECTION_UNAVAILABLE
+    // (-104) confirmé transitoire (System.getDeviceSettings().phoneConnected faux à l'instant
+    // précis de la tentative, alors que le téléphone était par ailleurs bien connecté) — retente
+    // plus tôt que le cycle normal plutôt que d'attendre jusqu'à 15 min. 5 minutes = le minimum
+    // documenté entre deux inscriptions Background.registerForTemporalEvent().
+    (:background)
+    const RETRY_INTERVAL_SECONDS = 5 * 60;
+
     (:background)
     class EnvironmentalBackgroundDelegate extends System.ServiceDelegate {
 
@@ -49,6 +57,10 @@ module AeroPollenCore {
                 Background.exit(null);
                 return;
             }
+
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc. Capturé juste avant
+            // la tentative réseau, pour comparer avec le -104 éventuellement obtenu.
+            new DebugStatus().recordPhoneConnected(System.getDeviceSettings().phoneConnected);
 
             var degrees = location.toDegrees();
             var client = new OpenMeteoAirQualityClient();

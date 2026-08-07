@@ -18,7 +18,21 @@ function testPollenFieldDisplaysGlobalScore(logger as Test.Logger) as Boolean {
     } as Dictionary<AeroPollenCore.PollenType, Number?>;
     var reading = AeroPollenCore.EnvironmentalReading.upToDate(48.8566, 2.3522, Time.now(), 20, scores);
 
-    return view.displayValueFor(reading).equals("80");
+    return view.displayValueFor(reading).equals("80 E");
+}
+
+// Paliers génériques assumés (pas d'échelle officielle unique par type de pollen, cf.
+// contracts/garmin-datafields.md), seuils volontairement bas pour les espèces très allergisantes.
+(:test)
+function testPollenFieldGradeLetterMatchesApproximateBands(logger as Test.Logger) as Boolean {
+    var view = new PollenFieldView();
+
+    return view.gradeLetterFor(0).equals("A")
+        && view.gradeLetterFor(9).equals("B")
+        && view.gradeLetterFor(29).equals("C")
+        && view.gradeLetterFor(69).equals("D")
+        && view.gradeLetterFor(149).equals("E")
+        && view.gradeLetterFor(150).equals("F");
 }
 
 // Scénario 2 (seconde partie) : hors zone de couverture, l'absence de donnée pollen doit être
@@ -29,7 +43,7 @@ function testPollenFieldDisplaysNoDataStateOutsideCoverage(logger as Test.Logger
     var reading = AeroPollenCore.EnvironmentalReading.upToDate(0.0, 0.0, Time.now(), 20, null);
 
     var displayed = view.displayValueFor(reading);
-    return !displayed.equals("80") && !displayed.equals("N/D");
+    return !displayed.equals("80 E") && !displayed.equals("N/D");
 }
 
 // FR-005 : un relevé "indisponible" (perte de connectivité) doit rester distinct de l'état
@@ -61,5 +75,5 @@ function testPollenFieldReflectsCacheUpdateWithoutUserAction(logger as Test.Logg
     store.save(AeroPollenCore.EnvironmentalReading.upToDate(45.7640, 4.8357, Time.now(), 10, updatedScores));
     var secondDisplay = view.displayValueFor(store.load());
 
-    return firstDisplay.equals("15") && secondDisplay.equals("90");
+    return firstDisplay.equals("15 C") && secondDisplay.equals("90 E");
 }

@@ -420,6 +420,146 @@ malgré le crash `SYC`.
    l'appareil entre les activités/déplacements, indépendamment de l'état affiché dans Garmin
    Connect Mobile).
 
+**Reprise 2026-08-07 — étape 1 exécutée, hypothèse principale infirmée** : la garde conditionnelle
+`if (Background.getTemporalEventRegisteredTime() == null)` a été restaurée dans les deux
+`initialize()` (annulation de l'expérimentation `Time.now()` inconditionnelle), build recompilé et
+redéployé. **Le logo persiste malgré tout**, à l'identique, dès ce premier redéploiement.
+
+Vérification des `err_log_*.txt` : un nouveau crash firmware (`err_log_104.txt`, `2026-8-7 10:2:19`,
+quelques minutes avant le traitement réussi de l'app à `10:09`) présente le **même
+`RTL Error Number":"6E5D8024"`** que les deux crashs du 5 août (`err_log_101`/`102`), mais avec
+`"Task Name":"CDP main"` cette fois (au lieu de `"SYC main"`) — tâche système différente à chaque
+occurrence, backtrace (adresses de fonction) différent aussi. Un troisième fichier,
+`err_log_103.txt` (`2026-8-5 20:18:14`), correspond très probablement au redémarrage manuel de
+l'appareil effectué pendant la session précédente (`error_cause":"8"`, tous les registres à zéro —
+signature d'un reset, pas d'un crash applicatif).
+
+**Interprétation** : puisque la garde bloque très probablement le rappel de
+`registerForTemporalEvent` sur cet appareil (l'inscription n'est plus `null` depuis les tests
+précédents — cf. hypothèse de persistance système au §12), notre code n'a quasiment rien fait de
+différent lors de ce redéploiement, et pourtant le crash `6E5D8024` s'est quand même produit. Ceci
+**infirme l'hypothèse principale retenue à l'étape 2** (l'appel inconditionnel comme cause directe
+du crash) — le crash semble plutôt corrélé au **processus de sideload/traitement USB du `.PRG`**
+lui-même (tâches système `SYC`/`CDP`, jamais la tâche `IQ` qui exécute le code Monkey C), indépendamment
+de notre code applicatif. Reste à déterminer si ce crash récurrent au sideload est lui-même la cause
+du symptôme "logo", ou un phénomène parallèle sans rapport (le firmware semble de toute façon finir
+par installer l'app malgré le crash, comme noté au paragraphe précédent).
+
+**Étape 3 exécutée — deuxième hypothèse infirmée** : build de production reconstruit sans aucun
+appel à `DebugStatus` (fichier conservé mais totalement déréférencé dans
+`EnvironmentalBackgroundDelegate`, `OpenMeteoAirQualityClient`, `AirQualityFieldView`,
+`PollenFieldView` — modifications non commitées, cf. état du code ci-dessous), redéployé. **Le logo
+persiste identiquement.**
+
+**Bilan à ce stade** : les deux causes candidates issues du code applicatif (registration
+inconditionnelle, module de diagnostic) sont maintenant **toutes les deux écartées**. Le symptôme
+"logo" se reproduit à l'identique sur trois variantes de code différentes (diagnostic complet,
+diagnostic + garde restaurée, aucun diagnostic). Combiné à la récurrence du crash firmware
+`6E5D8024` à chaque sideload (tâche système différente à chaque fois, jamais la tâche `IQ`), l'hypothèse
+la plus probable est désormais que **le sideload/traitement USB du `.PRG` corrompt lui-même
+l'installation** (Storage résiduel invalide, état système persistant incohérent, ou bug firmware du
+traitement), indépendamment du contenu du code Monkey C déployé. Prochaine étape suggérée : étape 4
+du plan (désinstallation complète via le menu Garmin, pas un simple écrasement du `.PRG`) pour
+repartir d'un état système totalement vierge.
+
+**Étape 4 exécutée — symptôme "logo" résolu**. Le menu Connect IQ de l'appareil ne liste pas les
+apps sideloadées (pas de "Désinstaller" disponible depuis l'UI Garmin) : désinstallation faite
+manuellement via USB, en supprimant `Garmin/Apps/Media/AeroPollen*.PRG` et
+`Garmin/Apps/DATA/AeroPollen*.{DAT,IDX,IMT}`. En tentant en plus un "redémarrage complet" pour
+repartir d'un état vraiment vierge, l'utilisateur a involontairement déclenché un **reset usine
+complet** de l'appareil (incident collatéral, cf. paragraphe suivant). Sideload frais du build
+propre sur cet état vierge : **le champ affiche "N/D" normalement, plus de logo.**
+
+**Conclusion sur le symptôme "logo"** : c'était un problème d'**état système résiduel accumulé par
+les écrasements successifs du `.PRG`** au fil des tests (Storage et/ou registration d'événement
+temporel incohérents), pas un bug de code. Les deux hypothèses de code testées aux étapes 2 et 3
+(registration inconditionnelle, module `DebugStatus`) étaient toutes les deux de fausses pistes —
+seule une réinstallation complète (pas un simple écrasement) a résolu le symptôme. **Point important
+pour la suite** : ne plus jamais se contenter d'écraser le `.PRG` pendant les prochaines
+itérations de debug si le symptôme "logo" réapparaît — repartir d'une désinstallation complète
+directement.
+
+**Incident collatéral — reset usine accidentel** : le "redémarrage complet" demandé s'est avéré être
+un reset usine, cassant le pairage Bluetooth (résolu en oubliant l'appareil côté Garmin Connect
+Mobile *et* côté Bluetooth du téléphone, puis en le réappairant comme un appareil neuf — étape
+souvent oubliée) et effaçant les profils d'activité personnalisés. Recherche confirmée : l'Edge 530
+n'a **pas** de sauvegarde cloud des profils d'activité/écrans de données dans Garmin Connect
+(contrairement à certaines montres Forerunner récentes qui ont un "Back Up & Restore" — absent du
+menu GCM pour ce modèle, vérifié par l'utilisateur). Profils recréés manuellement sur l'appareil.
+
+**Instrumentation `DebugStatus` étendue** : suite à une demande explicite de disposer de vraies
+traces plutôt que de retester à l'aveugle, `DebugStatus` propose désormais `checkpoint(stage)` et
+`recordException(stage, ex)` en plus de `record(code)`/`recordBaseline()` :
+- Chaque étape du cycle de vie (`initialize`, `getInitialView`, `onLayout`, `compute`, `onUpdate`)
+  est enveloppée dans un `try/catch` qui pose un checkpoint avant/après et capture le message de
+  toute exception interceptée, via `Storage` (seul canal qui survit à un crash, écrit en
+  synchrone).
+- `onUpdate()` ne laisse plus jamais rien remonter jusqu'à l'OS : en cas d'exception, le champ
+  affiche directement `checkpoint()`/message d'erreur au lieu de déclencher le logo —
+  auto-diagnostic sans dépendre d'un outil externe.
+- Recherché et confirmé écarté comme piste : l'ERA (Exception Reporting Tool) de Garmin ne couvre
+  que les apps publiées sur le store, pas les apps sideloadées avec clé développeur. Les fichiers
+  `Storage` bruts (`Garmin/Apps/DATA/<App>.DAT`) sont chiffrés/opaques (vérifié via `strings`/`xxd`
+  sur l'appareil réel — aucun texte exploitable), illisibles depuis le PC. Aucune API Monkey C ne
+  permet d'écrire dans un fichier de log arbitraire ni dans les `err_log_*.txt` firmware (ceux-ci
+  sont générés par l'OS pour des crashs natifs, hors sandbox de l'app). La seule vraie fenêtre
+  d'observation reste l'affichage sur le champ lui-même.
+- Le code diagnostic du service en arrière-plan (`debug.readCode()`) est réaffiché dans le label
+  quand `_reading.isUnavailable()`, sans casser l'affichage `N/D` réel exigé par FR-005 — répond
+  maintenant au problème *original* du §11/§12 (le "N/D" persistant malgré Bluetooth connecté),
+  maintenant que le logo n'y fait plus écran.
+
+**Retour terrain post-logo — diagnostic complet obtenu** : une fois le logo résolu (§ précédent), le
+champ a d'abord affiché `-999` (jamais exécuté, comme au tout début de ce §12) puis, après un
+nouveau cycle, `400` avec un corps de réponse vide (`value -`) — première hypothèse ("reason" JSON
+d'Open-Meteo) infirmée sur le terrain, remplacée par un dump générique type+contenu
+(`describeResponseData`) dans `OpenMeteoAirQualityClient.onResponse()`, indépendant de toute
+supposition sur la structure de la réponse. Requête elle-même revérifiée valide via `curl` direct
+contre l'API avec des coordonnées Paris (200 OK), donc le `400` ponctuel n'était pas un défaut de
+formatage de notre requête.
+
+**Cycle suivant — retour au problème d'origine du §11** : les deux apps affichent maintenant
+**`-104` (`BLE_CONNECTION_UNAVAILABLE`)**, avec un corps de réponse vide/absent (cohérent : la
+requête échoue avant tout envoi HTTP réel). Confirme l'hypothèse retenue en fin de §12 : le
+Bluetooth peut apparaître "connecté" côté Garmin Connect Mobile sans que le canal de données BLE
+soit disponible à l'instant précis où `Background.onTemporalEvent()` se déclenche. Point
+d'observation : le code obtenu **varie d'un cycle à l'autre** (`-999` → `400` → `-104`) sur la même
+session de test, cohérent avec un phénomène transitoire côté BLE/négociation plutôt qu'une panne
+permanente.
+
+**`phoneConnected` confirme le diagnostic** : `System.getDeviceSettings().phoneConnected` capturé
+juste avant chaque tentative réseau. Résultat terrain : `-104 P0` — le téléphone était bien vu comme
+**déconnecté par la montre à l'instant précis** de la tentative (pas un canal BLE qui refuse les
+données malgré un état "connecté"). Confirme une coupure BLE transitoire réelle, cohérente avec
+l'alternance observée sur la session (`-999` → `400` → `-104` → **succès (`34`/`7`)** → `-104` à
+nouveau) : le service fonctionne, la connectivité BLE fluctue.
+
+**Premières vraies valeurs obtenues** : `34` (qualité de l'air) et `7` (pollen), confirmant que
+toute la chaîne (registration, GPS, requête réseau, parsing, cache, rendu) fonctionne de bout en
+bout une fois l'appareil dans un état sain.
+
+**Correctif retry ajouté** : `OpenMeteoAirQualityClient.onResponse()` reprogramme le prochain
+réveil dans `RETRY_INTERVAL_SECONDS` (5 min, le minimum documenté entre deux inscriptions
+`Background.registerForTemporalEvent()`) plutôt que d'attendre le cycle normal de 15 min
+(`REFRESH_INTERVAL_SECONDS`), spécifiquement sur `Communications.BLE_CONNECTION_UNAVAILABLE`
+(-104) — remplace l'inscription déjà posée en tête d'`onTemporalEvent()`, la dernière avant
+`Background.exit()` faisant foi. 22+23 tests toujours au vert après ce changement.
+
+**Amélioration UX ajoutée (demande terrain 2026-08-07)** : les deux champs affichent désormais une
+lettre de catégorie A-F à côté de la valeur numérique brute :
+- Air : mappage direct sur les 6 paliers officiels EAQI (Agence Européenne de l'Environnement).
+- Pollen : seuils génériques **approximatifs** assumés (aucune échelle officielle unique par type
+  de pollen), volontairement bas pour ne pas sous-estimer les espèces très allergisantes à faible
+  seuil (ambroisie, armoise) — `pollenScoreGlobal` étant déjà un maximum entre espèces, pas une
+  moyenne.
+Voir `contracts/garmin-datafields.md` (mis à jour) pour le détail des paliers.
+
+**État à ce stade (2026-08-07, non commité)** : la chaîne complète fonctionne sur le terrain.
+Reste ouvert : observer sur la durée si le retry à 5 min réduit effectivement la fréquence/durée
+des `N/D` liés au `-104`, et si le retrait progressif du code de diagnostic (`DebugStatus` et ses
+points d'appel) peut être planifié maintenant que le symptôme "logo" et le `-104` sont tous deux
+expliqués.
+
 **Rappel** : les deux PR (#8 et son équivalent pour le fix mémoire) restent **volontairement
 ouvertes**, non mergées — investigation en cours, rien n'est prêt à merger tant que le symptôme
 "logo" n'est pas résolu.

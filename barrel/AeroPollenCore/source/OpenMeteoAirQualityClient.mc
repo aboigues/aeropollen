@@ -1,3 +1,4 @@
+import Toybox.Background;
 import Toybox.Communications;
 import Toybox.Lang;
 import Toybox.Time;
@@ -37,6 +38,13 @@ module AeroPollenCore {
             _longitude = longitude;
             _callback = callback;
 
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc. Capture les
+            // coordonnées exactes envoyées, au cas où leur format (précision, notation) serait en
+            // cause dans le 400 obtenu sur le terrain.
+            new DebugStatus().recordRequestDetail(
+                "lat=" + latitude.toString() + " lon=" + longitude.toString()
+            );
+
             var params = {
                 "latitude" => latitude,
                 "longitude" => longitude,
@@ -55,8 +63,24 @@ module AeroPollenCore {
         // Callback de Communications.makeWebRequest (contracts/open-meteo-air-quality.md,
         // Conditions d'échec).
         public function onResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
-            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
-            new DebugStatus().record(responseCode);
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc. Ne présume plus de
+            // la structure du corps de réponse (un premier essai ciblant une clé "reason" n'a
+            // rien donné sur le terrain, "value -" côté device) : dump générique du type réel et
+            // du contenu, quelle que soit sa forme.
+            var debug = new DebugStatus();
+            debug.record(responseCode);
+            debug.recordResponseDetail(describeResponseData(data));
+
+            if (responseCode == Communications.BLE_CONNECTION_UNAVAILABLE) {
+                // Retour terrain 2026-08-07 (TROUBLESHOOTING.md §12) : coupure BLE transitoire
+                // confirmée (phoneConnected faux à l'instant précis, malgré une connexion par
+                // ailleurs stable) — reprogramme le prochain réveil plus tôt que le cycle normal
+                // de 15 min (REFRESH_INTERVAL_SECONDS), au lieu d'attendre son terme. Cet appel
+                // remplace l'inscription déjà posée en tête d'EnvironmentalBackgroundDelegate.
+                // onTemporalEvent() pour le cycle normal : la dernière inscription avant
+                // Background.exit() fait foi.
+                Background.registerForTemporalEvent(new Time.Duration(AeroPollenCore.RETRY_INTERVAL_SECONDS));
+            }
 
             var latitude = _latitude;
             var longitude = _longitude;
@@ -175,6 +199,35 @@ module AeroPollenCore {
                 return (value as Float).toNumber();
             }
             return null;
+        }
+
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : dump générique et défensif du corps de
+        // réponse (type + contenu), sans supposer une structure JSON particulière — voir
+        // TROUBLESHOOTING.md §12 (une première hypothèse ciblant une clé "reason" s'est révélée
+        // fausse sur le terrain).
+        private function describeResponseData(data as Dictionary or String or Null) as String {
+            try {
+                if (data == null) {
+                    return "(null)";
+                }
+                if (data instanceof String) {
+                    return "str:" + (data as String);
+                }
+                if (data instanceof Dictionary) {
+                    var dict = data as Dictionary;
+                    var keys = dict.keys();
+                    var text = "dict:";
+                    for (var i = 0; i < keys.size(); i++) {
+                        var key = keys[i] as Object;
+                        var value = dict[key] as Object;
+                        text = text + key.toString() + "=" + value.toString() + ";";
+                    }
+                    return text;
+                }
+                return "(null)";
+            } catch (ex) {
+                return "(describeResponseData a échoué)";
+            }
         }
     }
 }

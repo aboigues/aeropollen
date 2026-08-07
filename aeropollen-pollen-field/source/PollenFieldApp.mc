@@ -12,11 +12,17 @@ class PollenFieldApp extends Application.AppBase {
     function initialize() {
         AppBase.initialize();
 
-        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : forcé à chaque lancement (au lieu de
-        // seulement si aucun événement n'est déjà enregistré) pour garantir un relevé immédiat
-        // à chaque réinstallation de debug, sans dépendre de l'échéance déjà programmée par une
-        // installation précédente. À revenir à la condition d'origine une fois le diagnostic fini.
-        Background.registerForTemporalEvent(Time.now());
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("app_init_start");
+        try {
+            if (Background.getTemporalEventRegisteredTime() == null) {
+                Background.registerForTemporalEvent(Time.now());
+            }
+            debug.checkpoint("app_init_ok");
+        } catch (ex) {
+            debug.recordException("app_init", ex);
+        }
     }
 
     // Cf. research.md §11 : contournement nécessaire lorsqu'une vue non annotée est référencée
@@ -24,7 +30,12 @@ class PollenFieldApp extends Application.AppBase {
     // annotée (:background) (AeroPollenCore.EnvironmentalBackgroundDelegate).
     (:typecheck(disableBackgroundCheck))
     function getInitialView() as [Views] or [Views, InputDelegates] {
-        return [ new $.PollenFieldView() ];
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("get_initial_view_start");
+        var view = new $.PollenFieldView();
+        debug.checkpoint("get_initial_view_ok");
+        return [ view ];
     }
 
     function getServiceDelegate() as [System.ServiceDelegate] {

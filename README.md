@@ -13,6 +13,7 @@ détail par appareil.
 ## Sommaire
 
 - [Fonctionnalités](#fonctionnalités)
+- [Interprétation des valeurs affichées](#interprétation-des-valeurs-affichées)
 - [Appareils pris en charge](#appareils-pris-en-charge)
 - [Structure du projet](#structure-du-projet)
 - [Prérequis](#prérequis)
@@ -28,20 +29,90 @@ détail par appareil.
 ## Fonctionnalités
 
 - **Champ « Qualité Air »** : indice européen de qualité de l'air (European AQI) à la position
-  GPS courante.
+  GPS courante, affiché avec une catégorie A-F pour une lecture instantanée à vélo (ex. `34 B`).
 - **Champ « Pollens »** : score de pollen global (bouleau, graminées, etc.) à la position GPS
-  courante.
+  courante, affiché avec une catégorie A-F (ex. `7 B`).
 - Rafraîchissement en arrière-plan (`Background.registerForTemporalEvent`), sans appel réseau
   dans le cycle de rendu (`compute()`/`onUpdate()`), conformément aux contraintes de la
-  plateforme Connect IQ (voir `specs/001-pollen-air-datafield/research.md`) — premier relevé
-  déclenché quasi immédiatement à l'installation, puis toutes les 15 minutes.
+  plateforme Connect IQ (voir `specs/001-pollen-air-datafield/research.md`) — voir
+  [Fréquence de rafraîchissement](#fréquence-de-rafraîchissement) pour le détail des cadences.
 - Chaque champ est une application Connect IQ **installable et testable indépendamment** de
   l'autre — un `manifest.xml` Connect IQ ne peut déclarer qu'un seul `<iq:application>`.
+
+## Interprétation des valeurs affichées
+
+Chaque champ affiche une valeur numérique brute suivie d'une lettre de catégorie (`A` = le
+meilleur, `F` = le pire), pour une lecture instantanée sans avoir à interpréter le chiffre en
+roulant.
+
+### Fréquence de rafraîchissement
+
+| Situation | Cadence |
+|---|---|
+| Premier relevé après installation | Quasi immédiat (`Time.now()`, une seule fois par installation) |
+| Cycle normal | Toutes les **15 minutes** (`REFRESH_INTERVAL_SECONDS`) |
+| Après une coupure Bluetooth transitoire (`-104`) | Nouvel essai après **5 minutes** (`RETRY_INTERVAL_SECONDS`), au lieu d'attendre le cycle normal |
+
+5 minutes est le **minimum imposé par la plateforme Connect IQ** entre deux inscriptions
+`Background.registerForTemporalEvent` — ce n'est pas configurable en dessous. La cadence normale de
+15 minutes (au lieu du minimum technique de 5) est un choix délibéré, pas une limitation : la
+qualité de l'air et les pollens évoluent lentement à l'échelle d'une sortie vélo (sauf changement
+de zone marqué), et rafraîchir plus souvent coûterait de la batterie et solliciterait inutilement
+l'API gratuite d'Open-Meteo sans bénéfice réel sur la donnée affichée. Voir FR-003/SC-002 dans
+[`specs/001-pollen-air-datafield/`](specs/001-pollen-air-datafield/) pour l'exigence associée.
+
+### Qualité de l'air
+
+Le chiffre est l'**Indice Européen de Qualité de l'Air (EAQI)**, tel que défini par l'Agence
+Européenne de l'Environnement et renvoyé directement par
+[Open-Meteo](https://open-meteo.com/en/docs/air-quality-api). C'est une échelle **officielle et
+normalisée**, pas une concentration brute d'un seul polluant — la lettre correspond directement à
+ses 6 paliers officiels :
+
+| Lettre | Plage EAQI | Signification officielle |
+|---|---|---|
+| A | 0-19 | Bon |
+| B | 20-39 | Correct |
+| C | 40-59 | Moyen |
+| D | 60-79 | Mauvais |
+| E | 80-99 | Très mauvais |
+| F | 100+ | Extrêmement mauvais |
+
+### Pollens
+
+Le chiffre est la concentration **maximale** parmi les 6 types de pollen suivis (aulne, bouleau,
+graminées, armoise, olivier, ambroisie), en grains/m³ — pas une moyenne : un seul type élevé fait
+monter le score global même si les autres sont nuls.
+
+**Contrairement à la qualité de l'air, il n'existe pas d'échelle européenne officielle unique pour
+la concentration pollinique** : les seuils "élevé"/"faible" varient réellement selon le type de
+pollen (une même concentration d'ambroisie, très allergisante, n'a pas le même impact qu'une
+concentration équivalente de bouleau). La lettre affichée ici repose donc sur des **paliers
+génériques approximatifs**, choisis volontairement bas pour ne pas sous-estimer les espèces les
+plus allergisantes à faible seuil :
+
+| Lettre | Plage (grains/m³) |
+|---|---|
+| A | 0 |
+| B | 1-9 |
+| C | 10-29 |
+| D | 30-69 |
+| E | 70-149 |
+| F | 150+ |
+
+### État « N/D »
+
+Signifie qu'aucun relevé exploitable n'est disponible en cache — jamais une ancienne valeur
+périmée ni un champ vide (voir [Confidentialité](#confidentialité)). Causes possibles : aucune
+position GPS acquise, ou tentative réseau échouée. Les coupures Bluetooth transitoires entre
+l'appareil et le téléphone (déclenchant l'échec de la requête même quand la connexion paraît
+stable) sont la cause la plus fréquente en usage réel ; un nouvel essai automatique est programmé
+5 minutes après un tel échec plutôt que d'attendre le cycle normal de 15 minutes.
 
 ## Appareils pris en charge
 
 Les manifestes déclarent les appareils Edge suivants (mêmes exigences d'API minimale). Seul
-**Edge 530** est réellement compilé, testé (41 tests `Toybox.Test`, voir [Tests](#tests)) et
+**Edge 530** est réellement compilé, testé (45 tests `Toybox.Test`, voir [Tests](#tests)) et
 validé par un sideload physique — les autres sont une extension raisonnable par famille de
 produit, **non vérifiée** :
 

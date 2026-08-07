@@ -13,7 +13,7 @@ function testAirQualityFieldDisplaysCachedIndex(logger as Test.Logger) as Boolea
     var view = new AirQualityFieldView();
     var reading = AeroPollenCore.EnvironmentalReading.upToDate(48.8566, 2.3522, Time.now(), 55, null);
 
-    return view.displayValueFor(reading).equals("55");
+    return view.displayValueFor(reading).equals("55 C");
 }
 
 // FR-005 : un relevé "indisponible" doit afficher l'état explicite, jamais une valeur vide.
@@ -22,7 +22,26 @@ function testAirQualityFieldDisplaysUnavailableState(logger as Test.Logger) as B
     var view = new AirQualityFieldView();
     var reading = AeroPollenCore.EnvironmentalReading.unavailable();
 
-    return !view.displayValueFor(reading).equals("55");
+    return !view.displayValueFor(reading).equals("55 C");
+}
+
+// Paliers officiels EAQI (Agence Européenne de l'Environnement) mappés sur A-F.
+(:test)
+function testAirQualityFieldGradeLetterMatchesOfficialEaqiBands(logger as Test.Logger) as Boolean {
+    var view = new AirQualityFieldView();
+
+    return view.gradeLetterFor(0).equals("A")
+        && view.gradeLetterFor(19).equals("A")
+        && view.gradeLetterFor(20).equals("B")
+        && view.gradeLetterFor(39).equals("B")
+        && view.gradeLetterFor(40).equals("C")
+        && view.gradeLetterFor(59).equals("C")
+        && view.gradeLetterFor(60).equals("D")
+        && view.gradeLetterFor(79).equals("D")
+        && view.gradeLetterFor(80).equals("E")
+        && view.gradeLetterFor(99).equals("E")
+        && view.gradeLetterFor(100).equals("F")
+        && view.gradeLetterFor(250).equals("F");
 }
 
 // Scénario 3 : dès que le Background Service écrit une nouvelle valeur dans le cache (nouvelle
@@ -39,5 +58,5 @@ function testAirQualityFieldReflectsCacheUpdateWithoutUserAction(logger as Test.
     store.save(AeroPollenCore.EnvironmentalReading.upToDate(45.7640, 4.8357, Time.now(), 99, null));
     var secondDisplay = view.displayValueFor(store.load());
 
-    return firstDisplay.equals("10") && secondDisplay.equals("99");
+    return firstDisplay.equals("10 A") && secondDisplay.equals("99 E");
 }

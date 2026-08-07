@@ -17,57 +17,95 @@ class PollenFieldView extends WatchUi.DataField {
     }
 
     function onLayout(dc as Dc) as Void {
-        var obscurityFlags = DataField.getObscurityFlags();
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        debug.checkpoint("on_layout_start");
+        try {
+            var obscurityFlags = DataField.getObscurityFlags();
 
-        if (obscurityFlags == (OBSCURE_TOP | OBSCURE_LEFT)) {
-            View.setLayout(Rez.Layouts.TopLeftLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_TOP | OBSCURE_RIGHT)) {
-            View.setLayout(Rez.Layouts.TopRightLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_LEFT)) {
-            View.setLayout(Rez.Layouts.BottomLeftLayout(dc));
-        } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_RIGHT)) {
-            View.setLayout(Rez.Layouts.BottomRightLayout(dc));
-        } else {
-            View.setLayout(Rez.Layouts.MainLayout(dc));
-            var labelView = View.findDrawableById("label") as Text;
-            labelView.locY = labelView.locY - 16;
-            var valueView = View.findDrawableById("value") as Text;
-            valueView.locY = valueView.locY + 7;
+            if (obscurityFlags == (OBSCURE_TOP | OBSCURE_LEFT)) {
+                View.setLayout(Rez.Layouts.TopLeftLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_TOP | OBSCURE_RIGHT)) {
+                View.setLayout(Rez.Layouts.TopRightLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_LEFT)) {
+                View.setLayout(Rez.Layouts.BottomLeftLayout(dc));
+            } else if (obscurityFlags == (OBSCURE_BOTTOM | OBSCURE_RIGHT)) {
+                View.setLayout(Rez.Layouts.BottomRightLayout(dc));
+            } else {
+                View.setLayout(Rez.Layouts.MainLayout(dc));
+                var labelView = View.findDrawableById("label") as Text;
+                labelView.locY = labelView.locY - 16;
+                var valueView = View.findDrawableById("value") as Text;
+                valueView.locY = valueView.locY + 7;
+            }
+
+            (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
+            debug.checkpoint("on_layout_ok");
+        } catch (ex) {
+            debug.recordException("on_layout", ex);
+            try {
+                View.setLayout(Rez.Layouts.MainLayout(dc));
+            } catch (ex2) {
+                debug.recordException("on_layout_fallback", ex2);
+            }
         }
-
-        (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
     }
 
     // Lecture seule du cache alimenté par EnvironmentalBackgroundDelegate (research.md §3, §9) ;
     // ne déclenche jamais de requête réseau (FR-007, SC-004).
     function compute(info as Activity.Info) as Void {
-        _reading = new AeroPollenCore.EnvironmentalReadingStore().load();
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc.
+        var debug = new AeroPollenCore.DebugStatus();
+        try {
+            _reading = new AeroPollenCore.EnvironmentalReadingStore().load();
+            debug.checkpoint("compute_ok");
+        } catch (ex) {
+            debug.recordException("compute", ex);
+            _reading = AeroPollenCore.EnvironmentalReading.unavailable();
+        }
     }
 
     function onUpdate(dc as Dc) as Void {
-        (View.findDrawableById("Background") as Background).setColor(getBackgroundColor() as ColorValue);
+        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : voir DebugStatus.mc. Tout onUpdate() est
+        // protégé pour ne jamais planter jusqu'à l'OS (sinon Connect IQ affiche le logo de l'app
+        // à la place du champ, sans aucune trace exploitable) ; en cas d'exception, on affiche le
+        // point de blocage + le message d'erreur directement sur le champ.
+        var debug = new AeroPollenCore.DebugStatus();
+        try {
+            (View.findDrawableById("Background") as Background).setColor(getBackgroundColor() as ColorValue);
 
-        var value = View.findDrawableById("value") as Text;
-        if (getBackgroundColor() == Graphics.COLOR_BLACK) {
-            value.setColor(Graphics.COLOR_WHITE);
-        } else {
-            value.setColor(Graphics.COLOR_BLACK);
+            var value = View.findDrawableById("value") as Text;
+            if (getBackgroundColor() == Graphics.COLOR_BLACK) {
+                value.setColor(Graphics.COLOR_WHITE);
+            } else {
+                value.setColor(Graphics.COLOR_BLACK);
+            }
+
+            // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : affiche le dernier code + un extrait du
+            // motif d'erreur HTTP à la place du libellé/valeur quand indisponible, pour voir
+            // pourquoi sans dépendre d'un outil externe (aucun log accessible sur l'appareil).
+            if (_reading.isUnavailable()) {
+                (View.findDrawableById("label") as Text).setText(
+                    debug.readCode().toString() + " " + debug.readPhoneConnected()
+                );
+                value.setText(debug.readResponseDetail());
+            } else {
+                (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
+                value.setText(displayValueFor(_reading));
+            }
+            debug.checkpoint("on_update_ok");
+
+            View.onUpdate(dc);
+        } catch (ex) {
+            debug.recordException("on_update", ex);
+            try {
+                (View.findDrawableById("label") as Text).setText(debug.readCheckpoint());
+                (View.findDrawableById("value") as Text).setText(debug.readExceptionMessage());
+                View.onUpdate(dc);
+            } catch (ex2) {
+                debug.recordException("on_update_fallback", ex2);
+            }
         }
-
-        // DIAGNOSTIC TEMPORAIRE (terrain, 2026-08) : remplace "N/D" par le dernier code obtenu,
-        // réparti label/value pour éviter la troncature (voir TROUBLESHOOTING.md §11).
-        if (_reading.isUnavailable()) {
-            var debugStatus = new AeroPollenCore.DebugStatus();
-            (View.findDrawableById("label") as Text).setText(
-                debugStatus.readCode().toString() + "/F" + debugStatus.readBaselineFreeKB().toString()
-            );
-            value.setText("B" + debugStatus.readFinalFreeKB().toString());
-        } else {
-            (View.findDrawableById("label") as Text).setText(Rez.Strings.FieldLabel);
-            value.setText(displayValueFor(_reading));
-        }
-
-        View.onUpdate(dc);
     }
 
     // Extrait pour être directement testable (PollenFieldIntegrationTest.mc) sans dépendre du
@@ -84,6 +122,25 @@ class PollenFieldView extends WatchUi.DataField {
             return WatchUi.loadResource(Rez.Strings.NoPollenDataValue) as String;
         }
 
-        return (globalScore as Number).toString();
+        return (globalScore as Number).toString() + " " + gradeLetterFor(globalScore as Number);
+    }
+
+    // Paliers génériques approximatifs (pas d'échelle européenne officielle unique pour la
+    // concentration pollinique, cf. contracts/garmin-datafields.md) : seuils volontairement bas
+    // pour ne pas sous-estimer les espèces très allergisantes à faible seuil (ambroisie,
+    // armoise), sachant que pollenScoreGlobal est déjà un maximum entre espèces, pas une moyenne.
+    function gradeLetterFor(score as Number) as String {
+        if (score <= 0) {
+            return "A";
+        } else if (score < 10) {
+            return "B";
+        } else if (score < 30) {
+            return "C";
+        } else if (score < 70) {
+            return "D";
+        } else if (score < 150) {
+            return "E";
+        }
+        return "F";
     }
 }
